@@ -468,9 +468,15 @@ class SszRustGenerator : public BaseGenerator {
   bool GenerateType(const StructDef &struct_def,
                     const SszContainerInfo &container, std::string *code) {
     std::string &c = *code;
+    // Owned type
     GenRustStruct(struct_def, container, &c);
     c += "\n";
     GenImpl(struct_def, container, &c);
+    c += "\n";
+    // Zero-copy view type
+    GenViewStruct(struct_def, container, &c);
+    c += "\n";
+    GenViewImpl(struct_def, container, &c);
     return true;
   }
 
@@ -1121,6 +1127,377 @@ class SszRustGenerator : public BaseGenerator {
       case SszType::Uint16: c += ind + "h.append_u16(" + var + ");\n"; break;
       case SszType::Uint32: c += ind + "h.append_u32(" + var + ");\n"; break;
       case SszType::Uint64: c += ind + "h.append_u64(" + var + ");\n"; break;
+      default: break;
+    }
+  }
+
+  // =======================================================================
+  // Zero-copy view types
+  // =======================================================================
+
+  void GenViewStruct(const StructDef &struct_def,
+                     const SszContainerInfo & /*container*/, std::string *code) {
+    std::string &c = *code;
+    std::string name = struct_def.name + "View";
+    c += "/// Zero-copy view into SSZ-encoded `" + struct_def.name + "`.\n";
+    c += "/// Reads fields directly from the underlying buffer.\n";
+    c += "#[derive(Clone, Copy, Debug)]\n";
+    c += "pub struct " + name + "<'a>(pub &'a [u8]);\n";
+  }
+
+  void GenViewImpl(const StructDef &struct_def,
+                   const SszContainerInfo &container, std::string *code) {
+    std::string &c = *code;
+    std::string name = struct_def.name + "View";
+    std::string owned = struct_def.name;
+
+    c += "impl<'a> " + name + "<'a> {\n";
+
+    // --- from_ssz_bytes ---
+    c += "    pub fn from_ssz_bytes(buf: &'a [u8]) -> Result<Self, SszError> {\n";
+    c += "        if buf.len() < " + NumToString(container.static_size) +
+         " { return Err(SszError::BufferTooSmall); }\n";
+    if (container.is_fixed) {
+      c += "        Ok(Self(&buf[.." + NumToString(container.static_size) +
+           "]))\n";
+    } else {
+      c += "        Ok(Self(buf))\n";
+    }
+    c += "    }\n\n";
+
+    // --- as_ssz_bytes ---
+    c += "    pub fn as_ssz_bytes(&self) -> &'a [u8] { self.0 }\n\n";
+
+    // --- field accessors ---
+    if (container.dynamic_fields.empty()) {
+      GenViewFixedAccessors(container, code);
+    } else {
+      GenViewDynamicAccessors(container, code);
+    }
+
+    // --- to_owned ---
+    c += "    pub fn to_owned_type(&self) -> " + owned + " {\n";
+    c += "        " + owned + "::from_ssz_bytes(self.0).unwrap()\n";
+    c += "    }\n\n";
+
+    // --- tree_hash_root ---
+    c += "    pub fn tree_hash_root(&self) -> [u8; 32] {\n";
+    c += "        let mut h = HasherPool::get();\n";
+    c += "        self.tree_hash_with(&mut h);\n";
+    c += "        let root = h.finish();\n";
+    c += "        HasherPool::put(h);\n";
+    c += "        root\n";
+    c += "    }\n\n";
+
+    // --- tree_hash_with ---
+    GenViewHashMethod(container, code);
+
+    c += "}\n";
+  }
+
+  // --- Fixed container accessors ---
+  void GenViewFixedAccessors(const SszContainerInfo &container,
+                             std::string *code) {
+    std::string &c = *code;
+    uint32_t offset = 0;
+    for (auto *field : container.all_fields) {
+      auto it = container.field_infos.find(field);
+      if (it == container.field_infos.end()) continue;
+      auto &info = it->second;
+      std::string fname = ToSnakeCase(field->name);
+      GenViewAccessor(info, fname, offset, code);
+      offset += info.fixed_size;
+    }
+  }
+
+  void GenViewAccessor(const SszFieldInfo &info, const std::string &fname,
+                       uint32_t offset, std::string *code) {
+    std::string &c = *code;
+    std::string s = NumToString(offset);
+    switch (info.ssz_type) {
+      case SszType::Bool:
+        c += "    pub fn " + fname + "(&self) -> bool { self.0[" + s +
+             "] == 1 }\n";
+        break;
+      case SszType::Uint8:
+        c += "    pub fn " + fname + "(&self) -> u8 { self.0[" + s + "] }\n";
+        break;
+      case SszType::Uint16:
+        c += "    pub fn " + fname +
+             "(&self) -> u16 { u16::from_le_bytes(self.0[" + s + ".." +
+             NumToString(offset + 2) + "].try_into().unwrap()) }\n";
+        break;
+      case SszType::Uint32:
+        c += "    pub fn " + fname +
+             "(&self) -> u32 { u32::from_le_bytes(self.0[" + s + ".." +
+             NumToString(offset + 4) + "].try_into().unwrap()) }\n";
+        break;
+      case SszType::Uint64:
+        c += "    pub fn " + fname +
+             "(&self) -> u64 { u64::from_le_bytes(self.0[" + s + ".." +
+             NumToString(offset + 8) + "].try_into().unwrap()) }\n";
+        break;
+      case SszType::Uint128:
+      case SszType::Uint256:
+      case SszType::Bitvector:
+        c += "    pub fn " + fname + "(&self) -> &'a [u8] { &self.0[" + s +
+             ".." + NumToString(offset + info.fixed_size) + "] }\n";
+        break;
+      case SszType::Vector:
+        if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
+          c += "    pub fn " + fname + "(&self) -> &'a [u8] { &self.0[" + s +
+               ".." + NumToString(offset + info.fixed_size) + "] }\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Container &&
+                   info.elem_info->struct_def) {
+          uint32_t esize = info.elem_info->fixed_size;
+          std::string vname = info.elem_info->struct_def->name + "View";
+          c += "    pub fn " + fname + "_len(&self) -> usize { " +
+               NumToString(info.limit) + " }\n";
+          c += "    pub fn " + fname + "_at(&self, i: usize) -> " + vname +
+               "<'a> { " + vname + "(&self.0[" + s + " + i * " +
+               NumToString(esize) + ".." + s + " + (i + 1) * " +
+               NumToString(esize) + "]) }\n";
+        } else {
+          c += "    pub fn " + fname + "_bytes(&self) -> &'a [u8] { &self.0[" +
+               s + ".." + NumToString(offset + info.fixed_size) + "] }\n";
+        }
+        break;
+      case SszType::Container:
+        if (info.struct_def) {
+          c += "    pub fn " + fname + "(&self) -> " +
+               info.struct_def->name + "View<'a> { " +
+               info.struct_def->name + "View(&self.0[" + s + ".." +
+               NumToString(offset + info.fixed_size) + "]) }\n";
+        }
+        break;
+      default:
+        break;
+    }
+  }
+
+  // --- Dynamic container accessors ---
+  void GenViewDynamicAccessors(const SszContainerInfo &container,
+                               std::string *code) {
+    std::string &c = *code;
+
+    // Helper to get offset of dynamic field i
+    // We generate private offset helpers
+    int dyn_count = 0;
+    uint32_t offset = 0;
+    for (auto *field : container.all_fields) {
+      auto it = container.field_infos.find(field);
+      if (it == container.field_infos.end()) continue;
+      auto &info = it->second;
+      if (info.is_dynamic) {
+        c += "    fn _off" + NumToString(dyn_count) +
+             "(&self) -> usize { u32::from_le_bytes(self.0[" +
+             NumToString(offset) + ".." + NumToString(offset + 4) +
+             "].try_into().unwrap()) as usize }\n";
+        dyn_count++;
+        offset += 4;
+      } else {
+        offset += info.fixed_size;
+      }
+    }
+    if (dyn_count > 0) c += "\n";
+
+    // Generate accessors
+    offset = 0;
+    int dyn_idx = 0;
+    for (auto *field : container.all_fields) {
+      auto it = container.field_infos.find(field);
+      if (it == container.field_infos.end()) continue;
+      auto &info = it->second;
+      std::string fname = ToSnakeCase(field->name);
+
+      if (info.is_dynamic) {
+        std::string start = "self._off" + NumToString(dyn_idx) + "()";
+        std::string end;
+        if (dyn_idx + 1 < dyn_count) {
+          end = "self._off" + NumToString(dyn_idx + 1) + "()";
+        } else {
+          end = "self.0.len()";
+        }
+        GenViewDynAccessor(info, fname, start, end, code);
+        dyn_idx++;
+        offset += 4;
+      } else {
+        GenViewAccessor(info, fname, offset, code);
+        offset += info.fixed_size;
+      }
+    }
+  }
+
+  void GenViewDynAccessor(const SszFieldInfo &info, const std::string &fname,
+                          const std::string &start, const std::string &end,
+                          std::string *code) {
+    std::string &c = *code;
+    switch (info.ssz_type) {
+      case SszType::List:
+        if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
+          c += "    pub fn " + fname +
+               "(&self) -> &'a [u8] { &self.0[" + start + ".." + end +
+               "] }\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Container &&
+                   info.elem_info->struct_def && !info.elem_info->is_dynamic) {
+          uint32_t esize = info.elem_info->fixed_size;
+          std::string vname = info.elem_info->struct_def->name + "View";
+          c += "    pub fn " + fname +
+               "_bytes(&self) -> &'a [u8] { &self.0[" + start + ".." + end +
+               "] }\n";
+          c += "    pub fn " + fname + "_len(&self) -> usize { (" + end +
+               " - " + start + ") / " + NumToString(esize) + " }\n";
+          c += "    pub fn " + fname + "_at(&self, i: usize) -> " + vname +
+               "<'a> { let s = " + start + "; " + vname +
+               "(&self.0[s + i * " + NumToString(esize) + "..s + (i + 1) * " +
+               NumToString(esize) + "]) }\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Container &&
+                   info.elem_info->struct_def && info.elem_info->is_dynamic) {
+          // Dynamic element list — offset-based
+          std::string vname = info.elem_info->struct_def->name + "View";
+          c += "    pub fn " + fname +
+               "_bytes(&self) -> &'a [u8] { &self.0[" + start + ".." + end +
+               "] }\n";
+          c += "    pub fn " + fname +
+               "_len(&self) -> usize { let sl = self." + fname +
+               "_bytes(); if sl.is_empty() { 0 } else { "
+               "u32::from_le_bytes(sl[0..4].try_into().unwrap()) as usize / "
+               "4 } }\n";
+          c += "    pub fn " + fname + "_at(&self, i: usize) -> " + vname +
+               "<'a> {\n";
+          c += "        let sl = self." + fname + "_bytes();\n";
+          c += "        let s = u32::from_le_bytes(sl[i*4..i*4+4]"
+               ".try_into().unwrap()) as usize;\n";
+          c += "        let e = if i + 1 < self." + fname +
+               "_len() { u32::from_le_bytes(sl[(i+1)*4..(i+1)*4+4]"
+               ".try_into().unwrap()) as usize } else { sl.len() };\n";
+          c += "        " + vname + "(&sl[s..e])\n";
+          c += "    }\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::List) {
+          // List of byte lists ([][]u8)
+          c += "    pub fn " + fname +
+               "_bytes(&self) -> &'a [u8] { &self.0[" + start + ".." + end +
+               "] }\n";
+        } else {
+          c += "    pub fn " + fname +
+               "(&self) -> &'a [u8] { &self.0[" + start + ".." + end +
+               "] }\n";
+        }
+        break;
+      case SszType::Bitlist:
+        c += "    pub fn " + fname +
+             "(&self) -> &'a [u8] { &self.0[" + start + ".." + end + "] }\n";
+        break;
+      case SszType::Container:
+        if (info.struct_def) {
+          c += "    pub fn " + fname + "(&self) -> " +
+               info.struct_def->name + "View<'a> { " +
+               info.struct_def->name + "View(&self.0[" + start + ".." + end +
+               "]) }\n";
+        }
+        break;
+      default:
+        c += "    pub fn " + fname +
+             "_bytes(&self) -> &'a [u8] { &self.0[" + start + ".." + end +
+             "] }\n";
+        break;
+    }
+  }
+
+  // --- View tree_hash_with ---
+  void GenViewHashMethod(const SszContainerInfo &container, std::string *code) {
+    std::string &c = *code;
+    c += "    pub fn tree_hash_with(&self, h: &mut Hasher) {\n";
+
+    // Check if any field requires owned-type delegation (lists, bitlists,
+    // dynamic containers). If so, delegate the entire hash to avoid
+    // partial merkleization issues.
+    bool has_complex = false;
+    for (auto *field : container.all_fields) {
+      auto it = container.field_infos.find(field);
+      if (it == container.field_infos.end()) continue;
+      auto &info = it->second;
+      if (info.ssz_type == SszType::List ||
+          info.ssz_type == SszType::Bitlist ||
+          (info.ssz_type == SszType::Container && info.is_dynamic)) {
+        has_complex = true;
+        break;
+      }
+    }
+
+    if (has_complex) {
+      // Delegate to owned type for containers with lists/dynamic fields
+      c += "        self.to_owned_type().tree_hash_with(h);\n";
+    } else {
+      // Pure fixed container — hash directly from buffer
+      c += "        let idx = h.index();\n";
+      uint32_t offset = 0;
+      for (auto *field : container.all_fields) {
+        auto it = container.field_infos.find(field);
+        if (it == container.field_infos.end()) continue;
+        auto &info = it->second;
+        std::string fname = ToSnakeCase(field->name);
+        GenViewHashField(info, "self." + fname + "()", fname, offset, code,
+                         "        ");
+        offset += info.fixed_size;
+      }
+      c += "        h.merkleize(idx);\n";
+    }
+    c += "    }\n";
+  }
+
+  void GenViewHashField(const SszFieldInfo &info, const std::string &accessor,
+                        const std::string & /*fname*/, uint32_t /*offset*/,
+                        std::string *code, const std::string &ind) {
+    std::string &c = *code;
+    switch (info.ssz_type) {
+      case SszType::Bool:
+        c += ind + "h.put_bool(" + accessor + ");\n"; break;
+      case SszType::Uint8:
+        c += ind + "h.put_u8(" + accessor + ");\n"; break;
+      case SszType::Uint16:
+        c += ind + "h.put_u16(" + accessor + ");\n"; break;
+      case SszType::Uint32:
+        c += ind + "h.put_u32(" + accessor + ");\n"; break;
+      case SszType::Uint64:
+        c += ind + "h.put_u64(" + accessor + ");\n"; break;
+      case SszType::Uint128: case SszType::Uint256:
+        c += ind + "h.put_bytes(" + accessor + ");\n"; break;
+      case SszType::Vector:
+      case SszType::Bitvector:
+        c += ind + "h.put_bytes(" + accessor + ");\n"; break;
+      case SszType::Container:
+        c += ind + accessor + ".tree_hash_with(h);\n"; break;
+      case SszType::List: {
+        uint64_t limit = info.limit;
+        if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
+          c += ind + "{\n";
+          c += ind + "    let sub = h.index();\n";
+          c += ind + "    h.append_bytes32(" + accessor + ");\n";
+          c += ind + "    h.merkleize_with_mixin(sub, " + accessor +
+               ".len() as u64, " + NumToString((limit + 31) / 32) + ");\n";
+          c += ind + "}\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Container) {
+          // Delegate to owned-type hash pattern
+          c += ind + "// list hash delegated to to_owned_type()\n";
+          c += ind + "self.to_owned_type().tree_hash_with(h);\n";
+          c += ind + "return;\n";
+        } else {
+          c += ind + "// complex list — delegate\n";
+          c += ind + "self.to_owned_type().tree_hash_with(h);\n";
+          c += ind + "return;\n";
+        }
+        break;
+      }
+      case SszType::Bitlist:
+        c += ind + "h.put_bitlist(" + accessor + ", " +
+             NumToString(info.limit) + ");\n";
+        break;
       default: break;
     }
   }
