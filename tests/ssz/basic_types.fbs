@@ -1,0 +1,10 @@
+namespace ssz_test;
+
+// Test schema: all SSZ scalar types.
+struct BasicTypes {
+  b:bool;
+  u8:ubyte;
+  u16:ushort;
+  u32:uint;
+  u64:ulong;
+}

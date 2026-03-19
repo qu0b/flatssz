@@ -1,0 +1,17 @@
+namespace ssz_test;
+
+// Test schema: fixed-size arrays (Vector[T,N]) and variable-size lists.
+struct FixedBytes48 {
+  data:[ubyte:48];
+}
+
+struct FixedInts8 {
+  data:[uint:8];
+}
+
+table VectorsAndLists {
+  fixed_bytes:FixedBytes48;
+  fixed_ints:FixedInts8;
+  dynamic_bytes:[ubyte] (ssz_max:"256");
+  dynamic_ints:[uint] (ssz_max:"64");
+}

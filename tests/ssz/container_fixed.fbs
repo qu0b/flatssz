@@ -1,0 +1,11 @@
+namespace ssz_test;
+
+// Test schema: all-fixed-size container (struct).
+// Mirrors Ethereum BeaconBlockHeader.
+struct FixedContainer {
+  slot:ulong;
+  proposer_index:ulong;
+  parent_root:[ubyte:32];
+  state_root:[ubyte:32];
+  body_root:[ubyte:32];
+}
