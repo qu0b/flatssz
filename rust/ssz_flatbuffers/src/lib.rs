@@ -3,9 +3,9 @@
 //! Provides [`Hasher`] for merkleization, [`HasherPool`] for reuse,
 //! and [`SszError`] for decode errors.
 //!
-//! Uses `sha2` crate which auto-detects SHA-NI hardware intrinsics.
-//! Merkleization is done in-place on the buffer with zero intermediate
-//! allocations.
+//! Merkleization uses `hashtree-rs` for batch SIMD SHA-256 (AVX2/AVX-512/SHA-NI)
+//! — the same C library used by Go's dynamic-ssz via prysmaticlabs/hashtree.
+//! Falls back to `sha2` crate for single hashes (mixin).
 
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
@@ -31,15 +31,28 @@ impl std::fmt::Display for SszError {
 
 impl std::error::Error for SszError {}
 
+// ---- hashtree init ----
+
+static HASHTREE_INIT: std::sync::Once = std::sync::Once::new();
+
+fn ensure_hashtree_init() {
+    HASHTREE_INIT.call_once(|| {
+        hashtree_rs::init();
+    });
+}
+
 // ---- Zero hashes ----
 
 fn compute_zero_hashes() -> [[u8; 32]; 65] {
+    ensure_hashtree_init();
     let mut zh = [[0u8; 32]; 65];
-    let mut hasher = Sha256::new();
+    let mut pair = [0u8; 64];
+    let mut out = [0u8; 32];
     for i in 0..64 {
-        hasher.update(zh[i]);
-        hasher.update(zh[i]);
-        zh[i + 1] = hasher.finalize_reset().into();
+        pair[..32].copy_from_slice(&zh[i]);
+        pair[32..].copy_from_slice(&zh[i]);
+        hashtree_rs::hash(&mut out, &pair, 1);
+        zh[i + 1] = out;
     }
     zh
 }
@@ -54,25 +67,27 @@ fn zero_hashes() -> &'static [[u8; 32]; 65] {
 
 /// Buffer-based SSZ merkleization engine.
 ///
-/// All merkleization is done in-place on the internal buffer with a reusable
-/// SHA-256 hasher instance. No intermediate Vec allocations per tree layer.
+/// Uses `hashtree-rs` for batch SIMD hashing of merkle tree layers
+/// and in-place buffer operations for zero intermediate allocations.
 pub struct Hasher {
     buf: Vec<u8>,
+    out: Vec<u8>,
     tmp: [u8; 64],
-    sha: Sha256,
 }
 
 impl Hasher {
     pub fn new() -> Self {
+        ensure_hashtree_init();
         Self {
             buf: Vec::with_capacity(8192),
+            out: Vec::with_capacity(4096),
             tmp: [0u8; 64],
-            sha: Sha256::new(),
         }
     }
 
     pub fn reset(&mut self) {
         self.buf.clear();
+        self.out.clear();
     }
 
     pub fn index(&self) -> usize {
@@ -175,27 +190,24 @@ impl Hasher {
         }
     }
 
-    // ---- Merkleization (in-place, zero-alloc) ----
+    // ---- Merkleization (in-place, batch SIMD) ----
 
-    /// Merkleize the buffer from `idx` to end into a single 32-byte root.
     pub fn merkleize(&mut self, idx: usize) {
         self.merkleize_inner(idx, 0);
     }
 
-    /// Merkleize with a length mixin for SSZ lists.
     pub fn merkleize_with_mixin(&mut self, idx: usize, num: u64, limit: u64) {
         self.fill_up_to_32();
         self.merkleize_inner(idx, limit);
 
         // Mix in length: hash(root || encode(num))
-        // root is at buf[idx..idx+32], we need to append the length and hash
         debug_assert!(self.buf.len() == idx + 32);
         self.tmp[..32].copy_from_slice(&self.buf[idx..idx + 32]);
         self.tmp[32..40].copy_from_slice(&num.to_le_bytes());
         self.tmp[40..64].fill(0);
 
-        self.sha.update(&self.tmp);
-        let hash = self.sha.finalize_reset();
+        // Single hash for mixin — use sha2 (one call, no batch needed)
+        let hash: [u8; 32] = Sha256::digest(&self.tmp).into();
         self.buf[idx..idx + 32].copy_from_slice(&hash);
     }
 
@@ -207,7 +219,6 @@ impl Hasher {
         }
         let zh = zero_hashes();
 
-        // Degenerate cases
         if limit == 0 {
             self.buf.truncate(idx);
             self.buf.extend_from_slice(&zh[0]);
@@ -215,7 +226,6 @@ impl Hasher {
         }
         if limit == 1 {
             if count >= 1 && input_len >= 32 {
-                // Keep just the first chunk
                 self.buf.truncate(idx + 32);
             } else {
                 self.buf.truncate(idx);
@@ -237,7 +247,7 @@ impl Hasher {
             self.buf.extend_from_slice(&[0u8; 32][..32 - rest]);
         }
 
-        // In-place layer-by-layer hashing
+        // In-place layer-by-layer hashing using batch SIMD
         for i in 0..depth {
             let layer_len = (self.buf.len() - idx) / 32;
 
@@ -247,20 +257,18 @@ impl Hasher {
 
             let pairs = (self.buf.len() - idx) / 64;
 
-            // Hash each pair in-place: copy pair to tmp, hash, write result back.
-            // dst[p*32] is always <= src[p*64], so we never overwrite unread data.
-            for p in 0..pairs {
-                let src = idx + p * 64;
-                self.tmp.copy_from_slice(&self.buf[src..src + 64]);
-                self.sha.update(&self.tmp);
-                let hash = self.sha.finalize_reset();
-                let dst = idx + p * 32;
-                self.buf[dst..dst + 32].copy_from_slice(&hash);
-            }
-
-            self.buf.truncate(idx + pairs * 32);
+            // Batch hash ALL pairs in this layer with one SIMD call.
+            // hashtree_rs::hash(out, chunks, count) hashes `count` pairs
+            // of 32-byte chunks using AVX2/AVX-512/SHA-NI.
+            self.out.resize(pairs * 32, 0);
+            hashtree_rs::hash(
+                &mut self.out[..pairs * 32],
+                &self.buf[idx..idx + pairs * 64],
+                pairs,
+            );
+            self.buf.truncate(idx);
+            self.buf.extend_from_slice(&self.out[..pairs * 32]);
         }
-        // buf[idx..idx+32] now contains the root
     }
 }
 
@@ -293,7 +301,6 @@ fn parse_bitlist(buf: &[u8]) -> (Vec<u8>, u64) {
 
 // ---- HasherPool ----
 
-/// Pool for reusing [`Hasher`] instances.
 pub struct HasherPool;
 
 static POOL: Mutex<Vec<Hasher>> = Mutex::new(Vec::new());
