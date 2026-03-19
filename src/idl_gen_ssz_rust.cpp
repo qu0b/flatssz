@@ -1135,6 +1135,120 @@ class SszRustGenerator : public BaseGenerator {
   // Zero-copy view types
   // =======================================================================
 
+  // --- Validation for fixed containers ---
+  void GenViewValidateFixed(const SszContainerInfo &container,
+                            std::string *code) {
+    std::string &c = *code;
+    // Validate bool fields are 0 or 1
+    uint32_t offset = 0;
+    for (auto *field : container.all_fields) {
+      auto it = container.field_infos.find(field);
+      if (it == container.field_infos.end()) continue;
+      auto &info = it->second;
+      if (info.ssz_type == SszType::Bool) {
+        c += "        if buf[" + NumToString(offset) +
+             "] > 1 { return Err(SszError::InvalidBool); }\n";
+      }
+      // Recursively validate nested fixed containers
+      if (info.ssz_type == SszType::Container && info.struct_def) {
+        c += "        " + info.struct_def->name +
+             "View::from_ssz_bytes(&buf[" + NumToString(offset) + ".." +
+             NumToString(offset + info.fixed_size) + "])?;\n";
+      }
+      offset += info.fixed_size;
+    }
+  }
+
+  // --- Validation for dynamic containers ---
+  void GenViewValidateDynamic(const SszContainerInfo &container,
+                              std::string *code) {
+    std::string &c = *code;
+    uint32_t ss = container.static_size;
+
+    // Read and validate all offsets
+    uint32_t offset = 0;
+    int dyn_idx = 0;
+    std::vector<int> dyn_indices;
+    for (auto *field : container.all_fields) {
+      auto it = container.field_infos.find(field);
+      if (it == container.field_infos.end()) continue;
+      auto &info = it->second;
+
+      if (info.is_dynamic) {
+        c += "        let _voff" + NumToString(dyn_idx) +
+             " = u32::from_le_bytes(buf[" + NumToString(offset) + ".." +
+             NumToString(offset + 4) + "].try_into().unwrap()) as usize;\n";
+        if (dyn_idx == 0) {
+          c += "        if _voff0 != " + NumToString(ss) +
+               " { return Err(SszError::InvalidOffset); }\n";
+        } else {
+          c += "        if _voff" + NumToString(dyn_idx) + " < _voff" +
+               NumToString(dyn_idx - 1) + " || _voff" +
+               NumToString(dyn_idx) +
+               " > buf.len() { return Err(SszError::InvalidOffset); }\n";
+        }
+        dyn_indices.push_back(dyn_idx);
+        dyn_idx++;
+        offset += 4;
+      } else {
+        // Validate fixed fields inline
+        if (info.ssz_type == SszType::Bool) {
+          c += "        if buf[" + NumToString(offset) +
+               "] > 1 { return Err(SszError::InvalidBool); }\n";
+        }
+        if (info.ssz_type == SszType::Container && info.struct_def) {
+          c += "        " + info.struct_def->name +
+               "View::from_ssz_bytes(&buf[" + NumToString(offset) + ".." +
+               NumToString(offset + info.fixed_size) + "])?;\n";
+        }
+        offset += info.fixed_size;
+      }
+    }
+
+    // Validate dynamic field contents
+    for (size_t i = 0; i < dyn_indices.size(); i++) {
+      int di = dyn_indices[i];
+      std::string start = "_voff" + NumToString(di);
+      std::string end = (i + 1 < dyn_indices.size())
+                            ? "_voff" + NumToString(dyn_indices[i + 1])
+                            : std::string("buf.len()");
+
+      auto *field = container.dynamic_fields[i];
+      auto it = container.field_infos.find(field);
+      if (it == container.field_infos.end()) continue;
+      auto &info = it->second;
+
+      // For lists of dynamic elements, validate inner offsets
+      if (info.ssz_type == SszType::List && info.elem_info &&
+          info.elem_info->ssz_type == SszType::Container &&
+          info.elem_info->is_dynamic) {
+        c += "        {\n";
+        c += "            let sl = &buf[" + start + ".." + end + "];\n";
+        c += "            if !sl.is_empty() {\n";
+        c += "                if sl.len() < 4 { return Err(SszError::InvalidOffset); }\n";
+        c += "                let fo = u32::from_le_bytes(sl[0..4].try_into().unwrap()) as usize;\n";
+        c += "                if fo % 4 != 0 || fo > sl.len() { return Err(SszError::InvalidOffset); }\n";
+        c += "                let cnt = fo / 4;\n";
+        c += "                let mut prev = fo;\n";
+        c += "                for j in 1..cnt {\n";
+        c += "                    let o = u32::from_le_bytes(sl[j*4..j*4+4].try_into().unwrap()) as usize;\n";
+        c += "                    if o < prev || o > sl.len() { return Err(SszError::InvalidOffset); }\n";
+        c += "                    prev = o;\n";
+        c += "                }\n";
+        c += "            }\n";
+        c += "        }\n";
+      }
+      // For lists of fixed structs, validate length is multiple of elem size
+      if (info.ssz_type == SszType::List && info.elem_info &&
+          info.elem_info->ssz_type == SszType::Container &&
+          !info.elem_info->is_dynamic && info.elem_info->fixed_size > 0) {
+        c += "        if (" + end + " - " + start + ") % " +
+             NumToString(info.elem_info->fixed_size) +
+             " != 0 { return Err(SszError::InvalidOffset); }\n";
+      }
+    }
+  }
+
   void GenViewStruct(const StructDef &struct_def,
                      const SszContainerInfo & /*container*/, std::string *code) {
     std::string &c = *code;
@@ -1153,14 +1267,19 @@ class SszRustGenerator : public BaseGenerator {
 
     c += "impl<'a> " + name + "<'a> {\n";
 
-    // --- from_ssz_bytes ---
+    // --- from_ssz_bytes (with full validation) ---
     c += "    pub fn from_ssz_bytes(buf: &'a [u8]) -> Result<Self, SszError> {\n";
     c += "        if buf.len() < " + NumToString(container.static_size) +
          " { return Err(SszError::BufferTooSmall); }\n";
     if (container.is_fixed) {
+      // Fixed container: length check is sufficient — all offsets are
+      // compile-time constants within [0, static_size).
+      GenViewValidateFixed(container, code);
       c += "        Ok(Self(&buf[.." + NumToString(container.static_size) +
            "]))\n";
     } else {
+      // Dynamic container: validate offset table
+      GenViewValidateDynamic(container, code);
       c += "        Ok(Self(buf))\n";
     }
     c += "    }\n\n";
