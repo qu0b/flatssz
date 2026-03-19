@@ -1,6 +1,6 @@
 # flatssz
 
-Cross-language SSZ code generation from [FlatBuffers](https://github.com/google/flatbuffers) schemas. Define Ethereum consensus layer types once in `.fbs` and generate Go and Rust code implementing marshal, unmarshal, and hash tree root.
+Cross-language SSZ code generation from [FlatBuffers](https://github.com/google/flatbuffers) schemas. Define Ethereum consensus layer types once in `.fbs` and generate Go and Rust code implementing marshal, unmarshal, and hash tree root. Go backend uses [dynamic-ssz](https://github.com/pk910/dynamic-ssz) for SIMD-accelerated merkleization.
 
 ## Quick Start
 
@@ -44,8 +44,6 @@ let root = block.tree_hash_root();
 
 Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots.
 
-### Go vs Rust
-
 | Operation | Go | Rust |
 |---|---|---|
 | **Unmarshal** | 31.5 us | **12.4 us** (2.5x) |
@@ -53,26 +51,6 @@ Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against
 | **HashTreeRoot** | **409 us** (1.9x) | 775 us |
 
 Go HTR uses batch SIMD SHA-256 via [hashtree](https://github.com/prysmaticlabs/hashtree) (cgo). Rust uses `sha2` with SHA-NI intrinsics (inlined, no FFI).
-
-### Go: flatssz vs other libraries
-
-| Operation | flatssz | dynamic-ssz | fastssz v2 |
-|---|---|---|---|
-| **Unmarshal** | **31.5 us** / 485 allocs | 42.2 us / 1515 allocs | 49.9 us / 1669 allocs |
-| **Marshal** | 15.7 us | **14.6 us** | 15.4 us |
-| **HashTreeRoot** | 409 us / 0 allocs | **402 us** / 0 allocs | 784 us / 32 allocs |
-
-Unmarshal is fastest because flatssz generates **value types** for fixed-size containers — a `Checkpoint` field is inline, not a heap-allocated pointer. This cuts allocations 3x (485 vs 1515). Marshal and HTR are on par; HTR uses the same [dynamic-ssz hasher](https://github.com/pk910/dynamic-ssz).
-
-### Value types vs pointer types (1M validators, ~122MB)
-
-| | Value (`[]Validator`) | Pointer (`[]*Validator`) |
-|---|---|---|
-| **Allocation** | **13.7 ms** / 1 alloc | 32.3 ms / 1M allocs |
-| **Iteration** | ~5 ms | ~5 ms |
-| **Memory retained after extracting 1 element** | **0 MB** | 0 MB |
-
-Value types are 2.4x faster to allocate with 1M fewer heap objects. Iteration speed is equivalent. Both correctly free the parent on GC — indexing a value slice produces a copy, not a reference.
 
 ## SSZ Attributes
 
