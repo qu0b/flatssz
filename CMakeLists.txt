@@ -166,6 +166,7 @@ set(FlatBuffers_Compiler_SRCS
   src/idl_gen_kotlin_kmp.cpp
   src/idl_gen_go.cpp
   src/idl_gen_ssz_go.cpp
+  src/idl_gen_ssz_rust.cpp
   src/idl_gen_java.cpp
   src/idl_gen_ts.cpp
   src/idl_gen_php.cpp
