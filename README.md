@@ -33,24 +33,31 @@ block.UnmarshalSSZ(data)
 root, _ := block.HashTreeRoot()
 ```
 
-**Rust:**
+**Rust (owned):**
 ```rust
 let data = block.as_ssz_bytes();
 let block = SignedBeaconBlock::from_ssz_bytes(&data)?;
 let root = block.tree_hash_root();
 ```
 
+**Rust (zero-copy view):**
+```rust
+let view = SignedBeaconBlockView::from_ssz_bytes(&data)?;  // 1.4ns — validates, no copy
+let slot = view.message().slot();                           // reads directly from buffer
+let root = view.message().tree_hash_root();                 // hashes from buffer
+```
+
 ## Benchmarks
 
 Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots.
 
-| Operation | Go | Rust |
-|---|---|---|
-| **Unmarshal** | 30.8 us | **13.0 us** (2.4x) |
-| **Marshal** | 15.2 us | **3.6 us** (4.2x) |
-| **HashTreeRoot** | 401 us | 417 us |
+| Operation | Go | Rust (owned) | Rust (view) |
+|---|---|---|---|
+| **Unmarshal** | 31 us | **13 us** | **1.4 ns** |
+| **Marshal** | 15 us | **3.8 us** | n/a (buffer is the encoding) |
+| **HashTreeRoot** | 424 us | 424 us | 459 us |
 
-Both use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree) (Go via cgo, Rust via hashtree-rs).
+Both Go and Rust use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). Rust views validate the full offset structure on construction (bounds, monotonicity, bools) and guarantee panic-free access — all for 1.4ns.
 
 ## SSZ Attributes
 
@@ -71,15 +78,15 @@ Comma-separated for nested lists: `(ssz_max:"1048576,1073741824")`.
 | `[ubyte:32]` | `[32]byte` | `[u8; 32]` |
 | `[T]` + `ssz_max` | `[]T` | `Vec<T>` |
 | `[string]` + `ssz_max` | `[][]byte` | `Vec<Vec<u8>>` |
-| `struct` / `table` | value struct | value struct |
+| `struct` / `table` | value struct | value struct + `View<'a>` |
 
 ## Project Structure
 
 ```
 src/idl_gen_ssz_go.cpp      -- Go code generator
-src/idl_gen_ssz_rust.cpp    -- Rust code generator
+src/idl_gen_ssz_rust.cpp    -- Rust code generator (owned + zero-copy views)
 go/ssz/                      -- Go runtime (error types)
-rust/ssz_flatbuffers/        -- Rust runtime (Hasher, SszError)
+rust/ssz_flatbuffers/        -- Rust runtime (Hasher via hashtree-rs, SszError)
 tests/ssz/                   -- Test schemas and benchmarks
 ```
 
