@@ -7,7 +7,7 @@ Cross-language SSZ (Simple Serialize) code generation from [FlatBuffers](https:/
 | Language | Flag | Runtime |
 |---|---|---|
 | **Go** | `--ssz-go` | [`dynamic-ssz/hasher`](https://github.com/pk910/dynamic-ssz) (SIMD SHA-256) + `go/ssz` (errors) |
-| **Rust** | `--ssz-rust` | `ssz_flatbuffers` crate (`sha2`) |
+| **Rust** | `--ssz-rust` | `ssz_flatbuffers` crate (`sha2` with SHA-NI) |
 
 ## Quick Start
 
@@ -121,17 +121,17 @@ Comma-separated `ssz_max` for nested lists: `(ssz_max:"1048576,1073741824")` set
 
 ## Benchmarks
 
-All benchmarks on a Deneb `SignedBeaconBlock` (~130KB of real Ethereum mainnet data).
+All benchmarks on a Deneb `SignedBeaconBlock` (~130KB of real Ethereum mainnet data). Verified correct against known hash tree roots.
 
-### Cross-language (flatssz Go vs Rust)
+### Cross-language
 
-| Operation | Go | Rust | Speedup |
-|---|---|---|---|
-| **Unmarshal** | 31.5 us | **12.4 us** | Rust 2.5x faster |
-| **Marshal** | 15.7 us | **3.8 us** | Rust 4.1x faster |
-| **HashTreeRoot** | **409 us** | 775 us | Go 1.9x faster |
+| Operation | Go | Rust |
+|---|---|---|
+| **Unmarshal** | 31.5 us | **12.4 us** (2.5x) |
+| **Marshal** | 15.7 us | **3.8 us** (4.1x) |
+| **HashTreeRoot** | **409 us** (1.9x) | 775 us |
 
-Both use the same generated code patterns from the same `.fbs` schema. Rust marshal/unmarshal advantage comes from zero-cost abstractions and no GC. Go HTR uses batch SIMD SHA-256 via [hashtree](https://github.com/prysmaticlabs/hashtree) (cgo); Rust uses `sha2` crate with SHA-NI hardware intrinsics (fully inlined, no FFI).
+Same `.fbs` schema, same generated code patterns. Rust wins on marshal/unmarshal (zero-cost abstractions, no GC). Go wins on HTR (batch SIMD SHA-256 via [hashtree](https://github.com/prysmaticlabs/hashtree) cgo).
 
 ### Go: flatssz vs other SSZ libraries
 
@@ -141,18 +141,34 @@ Both use the same generated code patterns from the same `.fbs` schema. Rust mars
 | **Marshal** | 15.7 us (1 alloc) | **14.6 us** (1 alloc) | 15.4 us (1 alloc) |
 | **HashTreeRoot** | 409 us (0 allocs) | **402 us** (0 allocs) | 784 us (32 allocs) |
 
-flatssz unmarshal is fastest due to **value types** for fixed containers — 485 allocations vs 1515+ in pointer-based libraries. HTR uses the same dynamic-ssz hasher, so performance is on par.
+### Why unmarshal is faster
+
+flatssz uses **value types** for fixed-size containers. A `Checkpoint` field is an inline struct, not a heap-allocated pointer. This eliminates allocations at the field level — 485 total allocs vs 1515+ in pointer-based libraries.
+
+### Memory retention
+
+Other SSZ libraries use pointer types (`[]*Validator`) which require a heap allocation per element. A common argument for pointers is that value types retain the parent object in memory. This is incorrect — indexing a value-type slice (`state.Validators[i]`) produces a **copy**, so the parent is free to be GC'd.
+
+Benchmarked with 1M validators (~122MB):
+
+| Metric | Value types (`[]Validator`) | Pointer types (`[]*Validator`) |
+|---|---|---|
+| Allocation time | **13.7 ms** | 32.3 ms |
+| Heap allocations | **1** | 1,000,001 |
+| Memory after extracting 1 element + GC | **0 MB retained** | 0 MB retained |
+
+Both approaches correctly free the parent state. Value types are 2.4x faster to allocate with 1M fewer heap objects.
+
+See `tests/ssz/memory_bench/` for the full benchmark.
 
 ## Project Structure
 
 ```
 src/idl_gen_ssz_go.cpp        -- Go SSZ code generator
 src/idl_gen_ssz_rust.cpp      -- Rust SSZ code generator
-src/idl_gen_ssz_go.h          -- Go generator header
-src/idl_gen_ssz_rust.h        -- Rust generator header
 go/ssz/                        -- Go runtime (error types)
 rust/ssz_flatbuffers/          -- Rust runtime crate (Hasher, HasherPool, SszError)
-tests/ssz/                     -- Test schemas
+tests/ssz/                     -- Test schemas and benchmarks
 ```
 
 ## Limitations
