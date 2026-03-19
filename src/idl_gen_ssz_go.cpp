@@ -1300,13 +1300,16 @@ class SszGoGenerator : public BaseGenerator {
     std::string &c = *code;
     std::string type_name = struct_def.name;
     c += "func (t *" + type_name +
-         ") HashTreeRoot() ([32]byte, error) {\n";
-    c += "\thh := ssz.DefaultHasherPool.Get()\n";
-    c += "\tdefer ssz.DefaultHasherPool.Put(hh)\n";
-    c += "\tif err := t.HashTreeRootWith(hh); err != nil {\n";
-    c += "\t\treturn [32]byte{}, err\n";
-    c += "\t}\n";
-    c += "\treturn hh.HashRoot()\n";
+         ") HashTreeRoot() (root [32]byte, err error) {\n";
+    c += "\terr = hasher.WithDefaultHasher(func(hh sszutils.HashWalker) "
+         "(err error) {\n";
+    c += "\t\tif err = t.HashTreeRootWith(hh); err != nil {\n";
+    c += "\t\t\treturn\n";
+    c += "\t\t}\n";
+    c += "\t\troot, err = hh.HashRoot()\n";
+    c += "\t\treturn\n";
+    c += "\t})\n";
+    c += "\treturn\n";
     c += "}\n";
   }
 
@@ -1317,7 +1320,7 @@ class SszGoGenerator : public BaseGenerator {
     std::string type_name = struct_def.name;
 
     c += "func (t *" + type_name +
-         ") HashTreeRootWith(hh *ssz.Hasher) error {\n";
+         ") HashTreeRootWith(hh sszutils.HashWalker) error {\n";
     c += "\tidx := hh.Index()\n";
     c += "\n";
 
@@ -1546,10 +1549,13 @@ class SszGoGenerator : public BaseGenerator {
     code += "\t\"encoding/binary\"\n";
     code += "\n";
     code += "\tssz \"github.com/google/flatbuffers/go/ssz\"\n";
+    code += "\t\"github.com/pk910/dynamic-ssz/hasher\"\n";
+    code += "\t\"github.com/pk910/dynamic-ssz/sszutils\"\n";
     code += ")\n\n";
 
     // Suppress unused import warnings
-    code += "var _ = binary.LittleEndian\n\n";
+    code += "var _ = binary.LittleEndian\n";
+    code += "var _ = hasher.FastHasherPool\n\n";
 
     code += classcode;
 
