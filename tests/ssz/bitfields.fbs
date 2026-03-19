@@ -1,0 +1,15 @@
+namespace ssz_test;
+
+// Helper struct for bitvector.
+struct SyncBits {
+  bits:[ubyte:8] (ssz_bitvector, ssz_bitsize:"64");
+}
+
+// Test schema: bitvector and bitlist types.
+table BitFields {
+  // Bitvector wrapped in struct
+  sync_bits:SyncBits;
+
+  // Bitlist: variable size with max capacity
+  attester_bits:[ubyte] (ssz_bitlist, ssz_max:"2048");
+}

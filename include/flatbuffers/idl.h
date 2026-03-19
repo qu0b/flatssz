@@ -767,6 +767,7 @@ struct IDLOptions {
     kNim = 1 << 17,
     kProto = 1 << 18,
     kKotlinKmp = 1 << 19,
+    kSszGo = 1 << 20,
     kMAX
   };
 
@@ -1026,6 +1027,13 @@ class Parser : public ParserState {
     // An attribute added to a vector field to indicate that it uses 64-bit
     // addressing and it has a 64-bit length.
     known_attributes_["vector64"] = true;
+
+    // SSZ (Simple Serialize) attributes for Ethereum consensus layer.
+    known_attributes_["ssz_max"] = true;
+    known_attributes_["ssz_size"] = true;
+    known_attributes_["ssz_bitsize"] = true;
+    known_attributes_["ssz_bitlist"] = true;
+    known_attributes_["ssz_bitvector"] = true;
   }
 
   // Copying is not allowed

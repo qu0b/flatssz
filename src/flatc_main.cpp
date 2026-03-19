@@ -29,6 +29,7 @@
 #include "idl_gen_dart.h"
 #include "idl_gen_fbs.h"
 #include "idl_gen_go.h"
+#include "idl_gen_ssz_go.h"
 #include "idl_gen_java.h"
 #include "idl_gen_json_schema.h"
 #include "idl_gen_kotlin.h"
@@ -114,6 +115,12 @@ int main(int argc, const char* argv[]) {
       flatbuffers::FlatCOption{"g", "go", "",
                                "Generate Go files for tables/structs"},
       flatbuffers::NewGoCodeGenerator());
+
+  flatc.RegisterCodeGenerator(
+      flatbuffers::FlatCOption{
+          "", "ssz-go", "",
+          "Generate Go SSZ encode/decode/hash files"},
+      flatbuffers::NewSszGoCodeGenerator());
 
   flatc.RegisterCodeGenerator(
       flatbuffers::FlatCOption{"j", "java", "",

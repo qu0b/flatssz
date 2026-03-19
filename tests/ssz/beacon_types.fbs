@@ -1,0 +1,38 @@
+namespace ssz_test;
+
+// Simplified Ethereum beacon chain types for SSZ testing.
+
+struct Bytes32 {
+  data:[ubyte:32];
+}
+
+struct Bytes96 {
+  data:[ubyte:96];
+}
+
+struct BeaconBlockHeader {
+  slot:ulong;
+  proposer_index:ulong;
+  parent_root:[ubyte:32];
+  state_root:[ubyte:32];
+  body_root:[ubyte:32];
+}
+
+struct Checkpoint {
+  epoch:ulong;
+  root:[ubyte:32];
+}
+
+table AttestationData {
+  slot:ulong;
+  index:ulong;
+  beacon_block_root:Bytes32;
+  source:Checkpoint;
+  target:Checkpoint;
+}
+
+table Attestation {
+  aggregation_bits:[ubyte] (ssz_bitlist, ssz_max:"2048");
+  data:AttestationData;
+  signature:Bytes96;
+}
