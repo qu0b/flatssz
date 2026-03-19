@@ -127,19 +127,19 @@ All benchmarks on a Deneb `SignedBeaconBlock` (~130KB of real Ethereum mainnet d
 
 | Operation | Go | Rust | Speedup |
 |---|---|---|---|
-| **Unmarshal** | 31.1 us | **14.9 us** | Rust 2.1x faster |
-| **Marshal** | 15.5 us | **3.9 us** | Rust 4.0x faster |
-| **HashTreeRoot** | **408 us** | 790 us | Go 1.9x faster |
+| **Unmarshal** | 31.5 us | **12.4 us** | Rust 2.5x faster |
+| **Marshal** | 15.7 us | **3.8 us** | Rust 4.1x faster |
+| **HashTreeRoot** | **409 us** | 775 us | Go 1.9x faster |
 
-Go HTR uses SIMD-accelerated SHA-256 via [hashtree](https://github.com/prysmaticlabs/hashtree) (cgo). Rust uses `sha2` crate (no SIMD specialization). Rust marshal/unmarshal advantage comes from zero-cost abstractions and no GC.
+Both use the same generated code patterns from the same `.fbs` schema. Rust marshal/unmarshal advantage comes from zero-cost abstractions and no GC. Go HTR uses batch SIMD SHA-256 via [hashtree](https://github.com/prysmaticlabs/hashtree) (cgo); Rust uses `sha2` crate with SHA-NI hardware intrinsics (fully inlined, no FFI).
 
 ### Go: flatssz vs other SSZ libraries
 
 | Operation | flatssz | dynamic-ssz codegen | fastssz v2 |
 |---|---|---|---|
-| **Unmarshal** | **31.1 us** (485 allocs) | 42.2 us (1515 allocs) | 49.9 us (1669 allocs) |
-| **Marshal** | 17.2 us (1 alloc) | **14.6 us** (1 alloc) | 15.4 us (1 alloc) |
-| **HashTreeRoot** | 408 us (0 allocs) | **402 us** (0 allocs) | 784 us (32 allocs) |
+| **Unmarshal** | **31.5 us** (485 allocs) | 42.2 us (1515 allocs) | 49.9 us (1669 allocs) |
+| **Marshal** | 15.7 us (1 alloc) | **14.6 us** (1 alloc) | 15.4 us (1 alloc) |
+| **HashTreeRoot** | 409 us (0 allocs) | **402 us** (0 allocs) | 784 us (32 allocs) |
 
 flatssz unmarshal is fastest due to **value types** for fixed containers — 485 allocations vs 1515+ in pointer-based libraries. HTR uses the same dynamic-ssz hasher, so performance is on par.
 
