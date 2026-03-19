@@ -209,8 +209,105 @@ func BenchmarkMemoryPerValidator(b *testing.B) {
 	})
 }
 
+// ---- Iteration benchmarks ----
+// Value types are contiguous in memory (cache-friendly).
+// Pointer types require pointer chasing (cache-hostile).
+
+var sinkU64 uint64
+
+// BenchmarkIterate_SumBalance iterates all validators and sums EffectiveBalance.
+func BenchmarkIterate_SumBalance(b *testing.B) {
+	valueState := makeValueState()
+	ptrState := makePtrState()
+
+	b.Run("value", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var sum uint64
+			for j := range valueState.Validators {
+				sum += valueState.Validators[j].EffectiveBalance
+			}
+			sinkU64 = sum
+		}
+	})
+
+	b.Run("ptr", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			var sum uint64
+			for _, v := range ptrState.Validators {
+				sum += v.EffectiveBalance
+			}
+			sinkU64 = sum
+		}
+	})
+}
+
+// BenchmarkIterate_CountActive counts validators with a non-max exit epoch,
+// touching multiple fields per validator.
+func BenchmarkIterate_CountActive(b *testing.B) {
+	// Set some validators as exited
+	valueState := makeValueState()
+	ptrState := makePtrState()
+	for i := 0; i < numValidators; i++ {
+		if i%10 == 0 {
+			valueState.Validators[i].ExitEpoch = 100
+			ptrState.Validators[i].ExitEpoch = 100
+		} else {
+			valueState.Validators[i].ExitEpoch = ^uint64(0)
+			ptrState.Validators[i].ExitEpoch = ^uint64(0)
+		}
+		valueState.Validators[i].ActivationEpoch = uint64(i % 1000)
+		ptrState.Validators[i].ActivationEpoch = uint64(i % 1000)
+	}
+
+	b.Run("value", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			count := 0
+			for j := range valueState.Validators {
+				v := &valueState.Validators[j]
+				if v.ActivationEpoch <= 500 && v.ExitEpoch == ^uint64(0) && !v.Slashed {
+					count++
+				}
+			}
+			sinkU64 = uint64(count)
+		}
+	})
+
+	b.Run("ptr", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			count := 0
+			for _, v := range ptrState.Validators {
+				if v.ActivationEpoch <= 500 && v.ExitEpoch == ^uint64(0) && !v.Slashed {
+					count++
+				}
+			}
+			sinkU64 = uint64(count)
+		}
+	})
+}
+
+// BenchmarkIterate_ModifyBalance modifies each validator's balance in-place.
+func BenchmarkIterate_ModifyBalance(b *testing.B) {
+	valueState := makeValueState()
+	ptrState := makePtrState()
+
+	b.Run("value", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for j := range valueState.Validators {
+				valueState.Validators[j].EffectiveBalance += 1
+			}
+		}
+	})
+
+	b.Run("ptr", func(b *testing.B) {
+		for i := 0; i < b.N; i++ {
+			for _, v := range ptrState.Validators {
+				v.EffectiveBalance += 1
+			}
+		}
+	})
+}
+
 func init() {
-	// Print validator size for reference
 	fmt.Printf("Validator struct size: %d bytes\n", 121)
 	fmt.Printf("Validator count: %d\n", numValidators)
 	fmt.Printf("Expected value state size: %.0f MB\n", float64(numValidators*121)/1024/1024)
