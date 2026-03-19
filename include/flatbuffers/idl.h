@@ -768,6 +768,7 @@ struct IDLOptions {
     kProto = 1 << 18,
     kKotlinKmp = 1 << 19,
     kSszGo = 1 << 20,
+    kSszRust = 1 << 21,
     kMAX
   };
 
