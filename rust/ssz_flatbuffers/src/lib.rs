@@ -2,6 +2,8 @@
 //!
 //! Provides [`Hasher`] for merkleization, [`HasherPool`] for reuse,
 //! and [`SszError`] for decode errors.
+//!
+//! Uses `sha2` crate which auto-detects SHA-NI hardware intrinsics.
 
 use sha2::{Digest, Sha256};
 use std::sync::Mutex;
@@ -31,11 +33,11 @@ impl std::error::Error for SszError {}
 
 fn compute_zero_hashes() -> [[u8; 32]; 65] {
     let mut zh = [[0u8; 32]; 65];
+    let mut tmp = [0u8; 64];
     for i in 0..64 {
-        let mut h = Sha256::new();
-        h.update(zh[i]);
-        h.update(zh[i]);
-        zh[i + 1] = h.finalize().into();
+        tmp[..32].copy_from_slice(&zh[i]);
+        tmp[32..].copy_from_slice(&zh[i]);
+        zh[i + 1] = Sha256::digest(&tmp).into();
     }
     zh
 }
@@ -65,8 +67,6 @@ impl Hasher {
     pub fn reset(&mut self) {
         self.buf.clear();
     }
-
-    // ---- Index / finish ----
 
     pub fn index(&self) -> usize {
         self.buf.len()
@@ -182,13 +182,11 @@ impl Hasher {
         let input = self.buf[idx..].to_vec();
         let root = merkleize_impl(&input, limit);
 
-        // Mix in length
         let mut combined = [0u8; 64];
         combined[..32].copy_from_slice(&root);
         combined[32..40].copy_from_slice(&num.to_le_bytes());
-        // bytes 40..64 are already zero
 
-        let hash = Sha256::digest(&combined);
+        let hash: [u8; 32] = Sha256::digest(&combined).into();
         self.buf.truncate(idx);
         self.buf.extend_from_slice(&hash);
     }
@@ -225,7 +223,6 @@ fn merkleize_impl(input: &[u8], mut limit: u64) -> Vec<u8> {
     }
 
     let mut data = input.to_vec();
-    // Pad to 32-byte alignment
     let rest = data.len() % 32;
     if rest != 0 {
         data.extend_from_slice(&[0u8; 32][..32 - rest]);
@@ -233,14 +230,13 @@ fn merkleize_impl(input: &[u8], mut limit: u64) -> Vec<u8> {
 
     for i in 0..depth {
         let layer_len = data.len() / 32;
-        let odd = layer_len % 2 == 1;
-        if odd {
+        if layer_len % 2 == 1 {
             data.extend_from_slice(&zh[i as usize]);
         }
         let pairs = (data.len() / 32) / 2;
         let mut output = Vec::with_capacity(pairs * 32);
         for p in 0..pairs {
-            let hash = Sha256::digest(&data[p * 64..(p + 1) * 64]);
+            let hash: [u8; 32] = Sha256::digest(&data[p * 64..(p + 1) * 64]).into();
             output.extend_from_slice(&hash);
         }
         data = output;
@@ -261,7 +257,6 @@ fn parse_bitlist(buf: &[u8]) -> (Vec<u8>, u64) {
     let mut dst = buf.to_vec();
     let last_idx = dst.len() - 1;
     dst[last_idx] &= !(1u8 << msb);
-    // Trim trailing zeros
     while dst.last() == Some(&0) {
         dst.pop();
     }
@@ -301,13 +296,12 @@ mod tests {
     fn test_merkleize_single_chunk() {
         let mut h = Hasher::new();
         h.put_u64(42);
-        let idx = 0;
-        h.merkleize(idx);
+        h.merkleize(0);
         assert_eq!(h.buf.len(), 32);
     }
 
     #[test]
-    fn test_roundtrip_basic() {
+    fn test_deterministic() {
         let mut h = Hasher::new();
         let idx = h.index();
         h.put_u64(1);
