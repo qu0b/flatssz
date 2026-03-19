@@ -46,11 +46,11 @@ Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against
 
 | Operation | Go | Rust |
 |---|---|---|
-| **Unmarshal** | 31.3 us | **12.2 us** (2.6x) |
-| **Marshal** | 15.5 us | **3.7 us** (4.2x) |
-| **HashTreeRoot** | **413 us** (1.4x) | 589 us |
+| **Unmarshal** | 30.8 us | **13.0 us** (2.4x) |
+| **Marshal** | 15.2 us | **3.6 us** (4.2x) |
+| **HashTreeRoot** | 401 us | 417 us |
 
-Go HTR uses batch SIMD SHA-256 via [hashtree](https://github.com/prysmaticlabs/hashtree) (cgo). Rust uses `sha2` with SHA-NI intrinsics (inlined, no FFI).
+Both use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree) (Go via cgo, Rust via hashtree-rs).
 
 ## SSZ Attributes
 

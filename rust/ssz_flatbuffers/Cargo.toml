@@ -6,3 +6,4 @@ description = "SSZ runtime support for flatssz code generation"
 
 [dependencies]
 sha2 = "0.10"
+hashtree-rs = "0.2"
