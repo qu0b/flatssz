@@ -1,116 +1,169 @@
-![logo](https://flatbuffers.dev/assets/flatbuffers_logo.svg) FlatBuffers
-===========
+# flatssz
 
-![Build status](https://github.com/google/flatbuffers/actions/workflows/build.yml/badge.svg?branch=master)
-[![BuildKite status](https://badge.buildkite.com/7979d93bc6279aa539971f271253c65d5e8fe2fe43c90bbb25.svg)](https://buildkite.com/bazel/flatbuffers)
-[![Fuzzing Status](https://oss-fuzz-build-logs.storage.googleapis.com/badges/flatbuffers.svg)](https://bugs.chromium.org/p/oss-fuzz/issues/list?sort=-opened&can=1&q=proj:flatbuffers)
-[![Discord Chat](https://img.shields.io/discord/656202785926152206.svg)](https:///discord.gg/6qgKs3R)
-[![Twitter Follow](https://img.shields.io/twitter/follow/wvo.svg?style=social)](https://twitter.com/wvo)
-[![Twitter Follow](https://img.shields.io/twitter/follow/dbaileychess.svg?style=social)](https://twitter.com/dbaileychess)
+SSZ (Simple Serialize) code generation backend for [FlatBuffers](https://github.com/google/flatbuffers). Define Ethereum consensus layer types once in `.fbs` schemas and generate Go code implementing `MarshalSSZ`, `UnmarshalSSZ`, `SizeSSZ`, and `HashTreeRoot`.
 
+## Why
 
-**FlatBuffers** is a cross platform serialization library architected for
-maximum memory efficiency. It allows you to directly access serialized data without parsing/unpacking it first, while still having great forwards/backwards compatibility.
+Ethereum's consensus layer uses SSZ for all data serialization and merkleization. Existing SSZ codegen tools are language-specific (Go struct tags, reflection). FlatBuffers provides a mature, cross-language IDL with an extensible code generator plugin system. This project adds an `--ssz-go` backend to `flatc`, enabling `.fbs` as the single schema source for SSZ encoding.
 
 ## Quick Start
 
-1. Build the compiler for flatbuffers (`flatc`)
+### 1. Build flatc
 
-    Use `cmake` to create the build files for your platform and then perform the compilation (Linux example).
+```bash
+cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release
+make -j
+```
 
-    ```
-    cmake -G "Unix Makefiles"
-    make -j
-    ```
+### 2. Define your schema
 
-2. Define your flatbuffer schema (`.fbs`)
+```fbs
+namespace eth;
 
-    Write the [schema](https://flatbuffers.dev/flatbuffers_guide_writing_schema.html) to define the data you want to serialize. See [monster.fbs](https://github.com/google/flatbuffers/blob/master/samples/monster.fbs) for an example.
+struct Checkpoint {
+  epoch:ulong;
+  root:[ubyte:32];
+}
 
-3. Generate code for your language(s)
+struct BeaconBlockHeader {
+  slot:ulong;
+  proposer_index:ulong;
+  parent_root:[ubyte:32];
+  state_root:[ubyte:32];
+  body_root:[ubyte:32];
+}
 
-    Use the `flatc` compiler to take your schema and generate language-specific code:
+table AttestationData {
+  slot:ulong;
+  index:ulong;
+  beacon_block_root:Bytes32;
+  source:Checkpoint;
+  target:Checkpoint;
+}
+```
 
-    ```
-    ./flatc --cpp --rust monster.fbs
-    ```
+### 3. Generate SSZ code
 
-    Which generates `monster_generated.h` and `monster_generated.rs` files.
+```bash
+./flatc --ssz-go -o output/ schema.fbs
+```
 
-4. Serialize data
+### 4. Use the generated types
 
-    Use the generated code, as well as the `FlatBufferBuilder` to construct your serialized buffer. ([`C++` example](https://github.com/google/flatbuffers/blob/master/samples/sample_binary.cpp#L24-L56))
+```go
+header := &BeaconBlockHeader{
+    Slot:          12345,
+    ProposerIndex: 42,
+}
 
-5. Transmit/store/save Buffer
+// Serialize
+data, err := header.MarshalSSZ()
 
-    Use your serialized buffer however you want. Send it to someone, save it for later, etc...
+// Deserialize
+decoded := &BeaconBlockHeader{}
+err = decoded.UnmarshalSSZ(data)
 
-6. Read the data
+// Merkle root
+root, err := header.HashTreeRoot()
+```
 
-    Use the generated accessors to read the data from the serialized buffer.
+## SSZ Attributes
 
-    It doesn't need to be the same language/schema version, FlatBuffers ensures the data is readable across languages and schema versions. See the [`Rust` example](https://github.com/google/flatbuffers/blob/master/samples/sample_binary.rs#L92-L106) reading the data written by `C++`.
+Annotate `.fbs` fields with SSZ metadata:
 
-## Documentation
+| Attribute | Purpose | Example |
+|---|---|---|
+| `ssz_max` | List capacity limit (required for `[T]` vectors and `string`) | `(ssz_max:"2048")` |
+| `ssz_size` | Fixed byte size for byte vectors | `(ssz_size:"32")` |
+| `ssz_bitsize` | Bit-level size for bitvectors | `(ssz_bitsize:"64")` |
+| `ssz_bitlist` | Marks `[ubyte]` as SSZ bitlist type | `(ssz_bitlist)` |
+| `ssz_bitvector` | Marks `[ubyte:N]` as SSZ bitvector type | `(ssz_bitvector)` |
 
-**Go to our [landing page][] to browse our documentation.**
+Comma-separated `ssz_max` for nested lists: `(ssz_max:"1048576,1073741824")` sets outer and inner limits.
 
-## Supported operating systems
-- Windows
-- macOS
-- Linux
-- Android
-- And any others with a recent C++ compiler (C++ 11 and newer)
+## Type Mapping
 
-## Supported programming languages
+| FlatBuffers | SSZ Type | Go Type |
+|---|---|---|
+| `bool` | Bool | `bool` |
+| `ubyte` / `byte` | Uint8 | `uint8` |
+| `ushort` / `short` | Uint16 | `uint16` |
+| `uint` / `int` | Uint32 | `uint32` |
+| `ulong` / `long` | Uint64 | `uint64` |
+| `[ubyte:32]` (struct) | Vector[Uint8, 32] | `[32]byte` |
+| `[T]` + `ssz_max` | List[T] | `[]T` |
+| `[T:N]` (struct) | Vector[T, N] | `[N]T` |
+| `[ubyte]` + `ssz_bitlist` | Bitlist | `[]byte` |
+| `[ubyte:N]` + `ssz_bitvector` | Bitvector | `[N]byte` |
+| `[string]` + `ssz_max` | List[List[byte]] | `[][]byte` |
+| `struct` (all fixed) | Container (fixed) | `struct` |
+| `table` | Container (dynamic) | `struct` |
 
-Code generation and runtime libraries for many popular languages.
+## Generated Methods
 
-1. C
-1. C++ - [snapcraft.io](https://snapcraft.io/flatbuffers)
-1. C# - [nuget.org](https://www.nuget.org/packages/Google.FlatBuffers)
-1. Dart - [pub.dev](https://pub.dev/packages/flat_buffers)
-1. Go - [go.dev](https://pkg.go.dev/github.com/google/flatbuffers)
-1. Java - [Maven](https://search.maven.org/artifact/com.google.flatbuffers/flatbuffers-java)
-1. JavaScript - [NPM](https://www.npmjs.com/package/flatbuffers)
-1. Kotlin
-1. Lobster
-1. Lua
-1. PHP
-1. Python - [PyPI](https://pypi.org/project/flatbuffers/)
-1. Rust - [crates.io](https://crates.io/crates/flatbuffers)
-1. Swift - [swiftpackageindex](https://swiftpackageindex.com/google/flatbuffers)
-1. TypeScript - [NPM](https://www.npmjs.com/package/flatbuffers)
-1. Nim
+For each struct/table, the generator produces:
 
-## Versioning
+- `SizeSSZ() int` -- byte size (compile-time constant for fixed types)
+- `MarshalSSZ() ([]byte, error)` -- serialize to new buffer
+- `MarshalSSZTo(buf []byte) ([]byte, error)` -- serialize appending to existing buffer
+- `UnmarshalSSZ(buf []byte) error` -- deserialize from buffer
+- `HashTreeRoot() ([32]byte, error)` -- compute SSZ merkle root
+- `HashTreeRootWith(hh *ssz.Hasher) error` -- compute root using pooled hasher
 
-FlatBuffers does not follow traditional SemVer versioning (see [rationale](https://github.com/google/flatbuffers/wiki/Versioning)) but rather uses a format of the date of the release.
+## Go Runtime Library
 
-## Contribution
+The `go/ssz/` package provides the runtime support:
 
-* [FlatBuffers Issues Tracker][] to submit an issue.
-* [stackoverflow.com][] with [`flatbuffers` tag][] for any questions regarding FlatBuffers.
+- `Hasher` -- buffer-based SHA-256 merkleization engine
+- `HasherPool` -- `sync.Pool` for `Hasher` reuse
+- `HashWalker` -- interface compatible with [dynamic-ssz](https://github.com/pk910/dynamic-ssz)
+- Precomputed zero hashes for 65 merkle tree depth levels
+- Error types: `ErrBufferTooSmall`, `ErrInvalidOffset`, `ErrInvalidBool`, `ErrBitlistNoTermination`, `ErrListTooBig`
 
-*To contribute to this project,* see [CONTRIBUTING][].
+## Benchmarks
 
-## Community
+Block mainnet benchmarks (Deneb `SignedBeaconBlock`, ~130KB) against established SSZ libraries:
 
-* [Discord Server](https:///discord.gg/6qgKs3R)
+| Operation | flatssz | dynamic-ssz codegen | fastssz v2 |
+|---|---|---|---|
+| **Unmarshal** | **30.5 us** (485 allocs) | 42.2 us (1515 allocs) | 49.9 us (1669 allocs) |
+| **Marshal** | 19.3 us (1 alloc) | **14.6 us** (1 alloc) | 15.4 us (1 alloc) |
+| **HashTreeRoot** | 912 us (128 allocs) | **402 us** (0 allocs) | 784 us (32 allocs) |
 
-## Security
+Unmarshal is fastest due to direct codegen with minimal allocations. Marshal is competitive. HashTreeRoot gap is due to using standard `crypto/sha256` vs SIMD-accelerated hashing in dynamic-ssz.
 
-Please see our [Security Policy](SECURITY.md) for reporting vulnerabilities.
+Benchmark source: [ssz-benchmark](https://github.com/pk910/ssz-benchmark)
 
-## Licensing
-*Flatbuffers* is licensed under the Apache License, Version 2.0. See [LICENSE][] for the full license text.
+## Test Schemas
 
-<br>
+See `tests/ssz/` for example schemas:
 
-   [CONTRIBUTING]: http://github.com/google/flatbuffers/blob/master/CONTRIBUTING.md
-   [`flatbuffers` tag]: https://stackoverflow.com/questions/tagged/flatbuffers
-   [FlatBuffers Google Group]: https://groups.google.com/forum/#!forum/flatbuffers
-   [FlatBuffers Issues Tracker]: http://github.com/google/flatbuffers/issues
-   [stackoverflow.com]: http://stackoverflow.com/search?q=flatbuffers
-   [landing page]: https://google.github.io/flatbuffers
-   [LICENSE]: https://github.com/google/flatbuffers/blob/master/LICENSE
+- `basic_types.fbs` -- all scalar types
+- `container_fixed.fbs` -- fixed-size container (BeaconBlockHeader pattern)
+- `container_dynamic.fbs` -- mixed fixed/dynamic fields
+- `vectors_lists.fbs` -- fixed arrays and variable lists
+- `bitfields.fbs` -- bitvector and bitlist
+- `beacon_types.fbs` -- real Ethereum types (Attestation, etc.)
+
+## Project Structure
+
+```
+src/idl_gen_ssz_go.cpp    -- SSZ Go code generator (~1500 lines)
+src/idl_gen_ssz_go.h      -- Generator header
+go/ssz/                    -- Go runtime library
+tests/ssz/                 -- Test schemas
+```
+
+## Limitations
+
+- `uint16` array length limit (65535) prevents expressing some BeaconState fields (e.g. `EPOCHS_PER_HISTORICAL_VECTOR = 65536`)
+- Fixed-length arrays (`[T:N]`) cannot appear directly in tables; wrap in a struct
+- No schema evolution (SSZ requires all fields present, no optional/deprecated)
+
+## Upstream
+
+This is a fork of [google/flatbuffers](https://github.com/google/flatbuffers) with the SSZ code generation backend added. All existing FlatBuffers functionality is preserved.
+
+## License
+
+Apache License, Version 2.0. See [LICENSE](LICENSE).
