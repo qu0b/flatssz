@@ -1,10 +1,13 @@
 # flatssz
 
-SSZ (Simple Serialize) code generation backend for [FlatBuffers](https://github.com/google/flatbuffers). Define Ethereum consensus layer types once in `.fbs` schemas and generate Go code implementing `MarshalSSZ`, `UnmarshalSSZ`, `SizeSSZ`, and `HashTreeRoot`.
+Cross-language SSZ (Simple Serialize) code generation from [FlatBuffers](https://github.com/google/flatbuffers) schemas. Define Ethereum consensus layer types once in `.fbs` and generate Go and Rust code implementing marshal, unmarshal, and hash tree root.
 
-## Why
+## Supported Languages
 
-Ethereum's consensus layer uses SSZ for all data serialization and merkleization. Existing SSZ codegen tools are language-specific (Go struct tags, reflection). FlatBuffers provides a mature, cross-language IDL with an extensible code generator plugin system. This project adds an `--ssz-go` backend to `flatc`, enabling `.fbs` as the single schema source for SSZ encoding.
+| Language | Flag | Runtime |
+|---|---|---|
+| **Go** | `--ssz-go` | [`dynamic-ssz/hasher`](https://github.com/pk910/dynamic-ssz) (SIMD SHA-256) + `go/ssz` (errors) |
+| **Rust** | `--ssz-rust` | `ssz_flatbuffers` crate (`sha2`) |
 
 ## Quick Start
 
@@ -42,34 +45,38 @@ table AttestationData {
 }
 ```
 
-### 3. Generate SSZ code
+### 3. Generate code
 
 ```bash
+# Go
 ./flatc --ssz-go -o output/ schema.fbs
+
+# Rust
+./flatc --ssz-rust -o output/ schema.fbs
 ```
 
 ### 4. Use the generated types
 
+**Go:**
 ```go
-header := &BeaconBlockHeader{
-    Slot:          12345,
-    ProposerIndex: 42,
-}
+header := &BeaconBlockHeader{Slot: 12345, ProposerIndex: 42}
 
-// Serialize
 data, err := header.MarshalSSZ()
-
-// Deserialize
 decoded := &BeaconBlockHeader{}
 err = decoded.UnmarshalSSZ(data)
-
-// Merkle root
 root, err := header.HashTreeRoot()
 ```
 
-## SSZ Attributes
+**Rust:**
+```rust
+let header = BeaconBlockHeader { slot: 12345, proposer_index: 42, ..Default::default() };
 
-Annotate `.fbs` fields with SSZ metadata:
+let data = header.as_ssz_bytes();
+let decoded = BeaconBlockHeader::from_ssz_bytes(&data)?;
+let root = header.tree_hash_root();
+```
+
+## SSZ Attributes
 
 | Attribute | Purpose | Example |
 |---|---|---|
@@ -83,86 +90,80 @@ Comma-separated `ssz_max` for nested lists: `(ssz_max:"1048576,1073741824")` set
 
 ## Type Mapping
 
-| FlatBuffers | SSZ Type | Go Type |
-|---|---|---|
-| `bool` | Bool | `bool` |
-| `ubyte` / `byte` | Uint8 | `uint8` |
-| `ushort` / `short` | Uint16 | `uint16` |
-| `uint` / `int` | Uint32 | `uint32` |
-| `ulong` / `long` | Uint64 | `uint64` |
-| `[ubyte:32]` (struct) | Vector[Uint8, 32] | `[32]byte` |
-| `[T]` + `ssz_max` | List[T] | `[]T` |
-| `[T:N]` (struct) | Vector[T, N] | `[N]T` |
-| `[ubyte]` + `ssz_bitlist` | Bitlist | `[]byte` |
-| `[ubyte:N]` + `ssz_bitvector` | Bitvector | `[N]byte` |
-| `[string]` + `ssz_max` | List[List[byte]] | `[][]byte` |
-| `struct` (all fixed) | Container (fixed) | `struct` |
-| `table` | Container (dynamic) | `struct` |
+| FlatBuffers | SSZ Type | Go | Rust |
+|---|---|---|---|
+| `bool` | Bool | `bool` | `bool` |
+| `ubyte` | Uint8 | `uint8` | `u8` |
+| `ushort` | Uint16 | `uint16` | `u16` |
+| `uint` | Uint32 | `uint32` | `u32` |
+| `ulong` | Uint64 | `uint64` | `u64` |
+| `[ubyte:32]` | Vector[Uint8, 32] | `[32]byte` | `[u8; 32]` |
+| `[T]` + `ssz_max` | List[T] | `[]T` | `Vec<T>` |
+| `[T:N]` | Vector[T, N] | `[N]T` | `[T; N]` |
+| `[ubyte]` + `ssz_bitlist` | Bitlist | `[]byte` | `Vec<u8>` |
+| `[string]` + `ssz_max` | List[List[byte]] | `[][]byte` | `Vec<Vec<u8>>` |
+| `struct` (all fixed) | Container (fixed) | value struct | value struct |
+| `table` | Container (dynamic) | value struct | value struct |
 
 ## Generated Methods
 
-For each struct/table, the generator produces:
+**Go:**
+- `SizeSSZ() int`
+- `MarshalSSZ() ([]byte, error)` / `MarshalSSZTo(buf []byte) ([]byte, error)`
+- `UnmarshalSSZ(buf []byte) error`
+- `HashTreeRoot() ([32]byte, error)` / `HashTreeRootWith(hh sszutils.HashWalker) error`
 
-- `SizeSSZ() int` -- byte size (compile-time constant for fixed types)
-- `MarshalSSZ() ([]byte, error)` -- serialize to new buffer
-- `MarshalSSZTo(buf []byte) ([]byte, error)` -- serialize appending to existing buffer
-- `UnmarshalSSZ(buf []byte) error` -- deserialize from buffer
-- `HashTreeRoot() ([32]byte, error)` -- compute SSZ merkle root
-- `HashTreeRootWith(hh *ssz.Hasher) error` -- compute root using pooled hasher
-
-## Go Runtime Library
-
-The `go/ssz/` package provides the runtime support:
-
-- `Hasher` -- buffer-based SHA-256 merkleization engine
-- `HasherPool` -- `sync.Pool` for `Hasher` reuse
-- `HashWalker` -- interface compatible with [dynamic-ssz](https://github.com/pk910/dynamic-ssz)
-- Precomputed zero hashes for 65 merkle tree depth levels
-- Error types: `ErrBufferTooSmall`, `ErrInvalidOffset`, `ErrInvalidBool`, `ErrBitlistNoTermination`, `ErrListTooBig`
+**Rust:**
+- `ssz_bytes_len(&self) -> usize`
+- `as_ssz_bytes(&self) -> Vec<u8>` / `ssz_append(&self, buf: &mut Vec<u8>)`
+- `from_ssz_bytes(bytes: &[u8]) -> Result<Self, SszError>`
+- `tree_hash_root(&self) -> [u8; 32]` / `tree_hash_with(&self, h: &mut Hasher)`
 
 ## Benchmarks
 
-Block mainnet benchmarks (Deneb `SignedBeaconBlock`, ~130KB) against established SSZ libraries:
+All benchmarks on a Deneb `SignedBeaconBlock` (~130KB of real Ethereum mainnet data).
+
+### Cross-language (flatssz Go vs Rust)
+
+| Operation | Go | Rust | Speedup |
+|---|---|---|---|
+| **Unmarshal** | 31.1 us | **14.9 us** | Rust 2.1x faster |
+| **Marshal** | 15.5 us | **3.9 us** | Rust 4.0x faster |
+| **HashTreeRoot** | **408 us** | 790 us | Go 1.9x faster |
+
+Go HTR uses SIMD-accelerated SHA-256 via [hashtree](https://github.com/prysmaticlabs/hashtree) (cgo). Rust uses `sha2` crate (no SIMD specialization). Rust marshal/unmarshal advantage comes from zero-cost abstractions and no GC.
+
+### Go: flatssz vs other SSZ libraries
 
 | Operation | flatssz | dynamic-ssz codegen | fastssz v2 |
 |---|---|---|---|
-| **Unmarshal** | **30.5 us** (485 allocs) | 42.2 us (1515 allocs) | 49.9 us (1669 allocs) |
-| **Marshal** | 19.3 us (1 alloc) | **14.6 us** (1 alloc) | 15.4 us (1 alloc) |
-| **HashTreeRoot** | 912 us (128 allocs) | **402 us** (0 allocs) | 784 us (32 allocs) |
+| **Unmarshal** | **31.1 us** (485 allocs) | 42.2 us (1515 allocs) | 49.9 us (1669 allocs) |
+| **Marshal** | 17.2 us (1 alloc) | **14.6 us** (1 alloc) | 15.4 us (1 alloc) |
+| **HashTreeRoot** | 408 us (0 allocs) | **402 us** (0 allocs) | 784 us (32 allocs) |
 
-Unmarshal is fastest due to direct codegen with minimal allocations. Marshal is competitive. HashTreeRoot gap is due to using standard `crypto/sha256` vs SIMD-accelerated hashing in dynamic-ssz.
-
-Benchmark source: [ssz-benchmark](https://github.com/pk910/ssz-benchmark)
-
-## Test Schemas
-
-See `tests/ssz/` for example schemas:
-
-- `basic_types.fbs` -- all scalar types
-- `container_fixed.fbs` -- fixed-size container (BeaconBlockHeader pattern)
-- `container_dynamic.fbs` -- mixed fixed/dynamic fields
-- `vectors_lists.fbs` -- fixed arrays and variable lists
-- `bitfields.fbs` -- bitvector and bitlist
-- `beacon_types.fbs` -- real Ethereum types (Attestation, etc.)
+flatssz unmarshal is fastest due to **value types** for fixed containers — 485 allocations vs 1515+ in pointer-based libraries. HTR uses the same dynamic-ssz hasher, so performance is on par.
 
 ## Project Structure
 
 ```
-src/idl_gen_ssz_go.cpp    -- SSZ Go code generator (~1500 lines)
-src/idl_gen_ssz_go.h      -- Generator header
-go/ssz/                    -- Go runtime library
-tests/ssz/                 -- Test schemas
+src/idl_gen_ssz_go.cpp        -- Go SSZ code generator
+src/idl_gen_ssz_rust.cpp      -- Rust SSZ code generator
+src/idl_gen_ssz_go.h          -- Go generator header
+src/idl_gen_ssz_rust.h        -- Rust generator header
+go/ssz/                        -- Go runtime (error types)
+rust/ssz_flatbuffers/          -- Rust runtime crate (Hasher, HasherPool, SszError)
+tests/ssz/                     -- Test schemas
 ```
 
 ## Limitations
 
-- `uint16` array length limit (65535) prevents expressing some BeaconState fields (e.g. `EPOCHS_PER_HISTORICAL_VECTOR = 65536`)
-- Fixed-length arrays (`[T:N]`) cannot appear directly in tables; wrap in a struct
-- No schema evolution (SSZ requires all fields present, no optional/deprecated)
+- `uint16` array length limit (65535) prevents some BeaconState fields (e.g. `EPOCHS_PER_HISTORICAL_VECTOR = 65536`)
+- Fixed-length arrays (`[T:N]`) cannot appear directly in tables — wrap in a struct
+- No schema evolution (SSZ requires all fields present)
 
 ## Upstream
 
-This is a fork of [google/flatbuffers](https://github.com/google/flatbuffers) with the SSZ code generation backend added. All existing FlatBuffers functionality is preserved.
+Fork of [google/flatbuffers](https://github.com/google/flatbuffers) with SSZ code generation backends added. All existing FlatBuffers functionality is preserved.
 
 ## License
 

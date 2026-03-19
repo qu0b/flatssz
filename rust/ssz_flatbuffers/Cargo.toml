@@ -1,0 +1,8 @@
+[package]
+name = "ssz_flatbuffers"
+version = "0.1.0"
+edition = "2021"
+description = "SSZ runtime support for flatssz code generation"
+
+[dependencies]
+sha2 = "0.10"
