@@ -1,0 +1,7 @@
+namespace ssz_test;
+
+// ProgressiveList: unbounded list with progressive merkleization.
+table ProgressiveListExample {
+  values:[ulong] (ssz_progressive_list);
+  data:[ubyte] (ssz_max:"1024");
+}

@@ -1035,6 +1035,11 @@ class Parser : public ParserState {
     known_attributes_["ssz_bitsize"] = true;
     known_attributes_["ssz_bitlist"] = true;
     known_attributes_["ssz_bitvector"] = true;
+
+    // SSZ progressive types (EIP-7495 / EIP-7916).
+    known_attributes_["ssz_progressive"] = true;
+    known_attributes_["ssz_progressive_list"] = true;
+    known_attributes_["ssz_progressive_bitlist"] = true;
   }
 
   // Copying is not allowed

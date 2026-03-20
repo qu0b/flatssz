@@ -51,6 +51,7 @@ namespace ssz_rust {
 enum class SszType {
   Bool, Uint8, Uint16, Uint32, Uint64, Uint128, Uint256,
   Container, Vector, List, Bitlist, Bitvector, Union,
+  ProgressiveContainer, ProgressiveList,
 };
 
 struct SszFieldInfo {
@@ -70,9 +71,17 @@ struct SszFieldInfo {
 struct SszContainerInfo {
   uint32_t static_size;
   bool is_fixed;
+  bool is_progressive;
+  uint32_t max_ssz_index;
+  std::vector<uint8_t> active_fields_bitvector;
+  std::map<const FieldDef *, uint32_t> field_ssz_indices;
   std::vector<const FieldDef *> all_fields;
   std::vector<const FieldDef *> dynamic_fields;
   std::map<const FieldDef *, SszFieldInfo> field_infos;
+
+  SszContainerInfo()
+      : static_size(0), is_fixed(true), is_progressive(false),
+        max_ssz_index(0) {}
 };
 
 // ---------------------------------------------------------------------------
@@ -260,6 +269,14 @@ class SszRustGenerator : public BaseGenerator {
   bool ResolveVectorType(const FieldDef &field, const Type &type,
                          const SymbolTable<Value> &attrs, SszFieldInfo &info) {
     auto elem_type = type.VectorType();
+    // Check for progressive bitlist (EIP-7916)
+    if (attrs.Lookup("ssz_progressive_bitlist")) {
+      info.ssz_type = SszType::Bitlist;
+      info.limit = 0;  // unbounded
+      info.fixed_size = 0;
+      info.is_dynamic = true;
+      return true;
+    }
     if (attrs.Lookup("ssz_bitlist")) {
       auto max_attr = attrs.Lookup("ssz_max");
       if (!max_attr) {
@@ -271,6 +288,15 @@ class SszRustGenerator : public BaseGenerator {
       info.limit = StringToUInt(max_attr->constant.c_str());
       info.fixed_size = 0;
       info.is_dynamic = true;
+      return true;
+    }
+    // Check for progressive list (EIP-7916) — no ssz_max needed
+    if (attrs.Lookup("ssz_progressive_list")) {
+      info.ssz_type = SszType::ProgressiveList;
+      info.fixed_size = 0;
+      info.is_dynamic = true;
+      info.elem_info.reset(new SszFieldInfo());
+      if (!ResolveElemType(field, elem_type, *info.elem_info)) return false;
       return true;
     }
     auto max_attr = attrs.Lookup("ssz_max");
@@ -382,6 +408,32 @@ class SszRustGenerator : public BaseGenerator {
       }
       container.field_infos.emplace(&field, std::move(info));
     }
+
+    // Detect progressive container (EIP-7495)
+    if (struct_def.attributes.Lookup("ssz_progressive")) {
+      container.is_progressive = true;
+      container.max_ssz_index = 0;
+
+      for (auto *field : container.all_fields) {
+        auto id_attr = field->attributes.Lookup("id");
+        if (id_attr) {
+          uint32_t idx = static_cast<uint32_t>(
+              StringToUInt(id_attr->constant.c_str()));
+          container.field_ssz_indices[field] = idx;
+          if (idx > container.max_ssz_index) container.max_ssz_index = idx;
+        }
+      }
+
+      // Compute active_fields bitvector
+      uint32_t bitvec_bytes = (container.max_ssz_index + 8) / 8;
+      container.active_fields_bitvector.resize(bitvec_bytes, 0);
+      for (auto &kv : container.field_ssz_indices) {
+        uint32_t idx = kv.second;
+        container.active_fields_bitvector[idx / 8] |=
+            static_cast<uint8_t>(1u << (idx % 8));
+      }
+    }
+
     return true;
   }
 
@@ -409,6 +461,7 @@ class SszRustGenerator : public BaseGenerator {
                  NumToString(info.limit) + "]";
         return "()";
       }
+      case SszType::ProgressiveList:
       case SszType::List: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8)
           return "Vec<u8>";
@@ -421,6 +474,8 @@ class SszRustGenerator : public BaseGenerator {
       case SszType::Bitlist: return "Vec<u8>";
       case SszType::Bitvector:
         return "[u8; " + NumToString((info.bitsize + 7) / 8) + "]";
+      case SszType::ProgressiveContainer:
+        return info.struct_def ? info.struct_def->name : "()";
       case SszType::Union: return "()";
     }
     return "()";
@@ -435,6 +490,7 @@ class SszRustGenerator : public BaseGenerator {
       case SszType::Uint64: return "u64";
       case SszType::Container:
         return info.struct_def ? info.struct_def->name : "()";
+      case SszType::ProgressiveList:
       case SszType::List: return "Vec<u8>";
       default: return "()";
     }
@@ -453,10 +509,13 @@ class SszRustGenerator : public BaseGenerator {
         if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8)
           return "[0u8; " + NumToString(info.limit) + "]";
         return "Default::default()";
+      case SszType::ProgressiveList:
       case SszType::List: case SszType::Bitlist:
         return "Vec::new()";
       case SszType::Bitvector:
         return "[0u8; " + NumToString((info.bitsize + 7) / 8) + "]";
+      case SszType::ProgressiveContainer:
+        return info.struct_def ? info.struct_def->name + "::default()" : "()";
       default: return "Default::default()";
     }
   }
@@ -582,6 +641,7 @@ class SszRustGenerator : public BaseGenerator {
                     std::string *code) {
     std::string &c = *code;
     switch (info.ssz_type) {
+      case SszType::ProgressiveList:
       case SszType::List:
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
           c += "        size += " + var + ".len() * 4;\n";
@@ -602,6 +662,7 @@ class SszRustGenerator : public BaseGenerator {
       case SszType::Bitlist:
         c += "        size += " + var + ".len();\n";
         break;
+      case SszType::ProgressiveContainer:
       case SszType::Container:
         c += "        size += " + var + ".ssz_bytes_len();\n";
         break;
@@ -691,6 +752,7 @@ class SszRustGenerator : public BaseGenerator {
           GenMarshalPrimitiveArray(info, var, code, ind);
         }
         break;
+      case SszType::ProgressiveList:
       case SszType::List:
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
           // [][]u8 — offset-based
@@ -741,6 +803,7 @@ class SszRustGenerator : public BaseGenerator {
       case SszType::Bitvector:
         c += ind + "buf.extend_from_slice(&" + var + ");\n";
         break;
+      case SszType::ProgressiveContainer:
       case SszType::Container:
         c += ind + var + ".ssz_append(buf);\n";
         break;
@@ -876,6 +939,7 @@ class SszRustGenerator : public BaseGenerator {
         // Fixed byte arrays — use try_into
         return slice + ".try_into().unwrap()";
       }
+      case SszType::ProgressiveContainer:
       case SszType::Container:
         return info.struct_def->name + "::from_ssz_bytes(&" + slice + ")?";
       default:
@@ -890,6 +954,7 @@ class SszRustGenerator : public BaseGenerator {
     std::string slice = buf + "[" + start + ".." + end + "]";
 
     switch (info.ssz_type) {
+      case SszType::ProgressiveList:
       case SszType::List:
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
           // Vec<Vec<u8>> — offset-based
@@ -957,6 +1022,7 @@ class SszRustGenerator : public BaseGenerator {
         return slice + ".to_vec()";
       case SszType::Bitlist:
         return slice + ".to_vec()";
+      case SszType::ProgressiveContainer:
       case SszType::Container:
         return info.struct_def->name + "::from_ssz_bytes(&" + slice + ")?";
       default:
@@ -1000,15 +1066,48 @@ class SszRustGenerator : public BaseGenerator {
     c += "    pub fn tree_hash_with(&self, h: &mut Hasher) {\n";
     c += "        let idx = h.index();\n";
 
-    for (auto *field : container.all_fields) {
-      auto it = container.field_infos.find(field);
-      if (it == container.field_infos.end()) continue;
-      auto &info = it->second;
-      std::string fname = "self." + ToSnakeCase(field->name);
-      GenHashField(info, fname, &c, "        ");
-    }
+    if (container.is_progressive) {
+      // EIP-7495: emit leaves for indices 0..max_ssz_index,
+      // filling gaps with zero-hash for inactive fields.
+      std::map<uint32_t, const FieldDef *> index_to_field;
+      for (auto &kv : container.field_ssz_indices) {
+        index_to_field[kv.second] = kv.first;
+      }
 
-    c += "        h.merkleize(idx);\n";
+      for (uint32_t i = 0; i <= container.max_ssz_index; i++) {
+        auto fit = index_to_field.find(i);
+        if (fit != index_to_field.end()) {
+          auto *field = fit->second;
+          auto iit = container.field_infos.find(field);
+          if (iit == container.field_infos.end()) continue;
+          std::string fname = "self." + ToSnakeCase(field->name);
+          GenHashField(iit->second, fname, &c, "        ");
+        } else {
+          c += "        h.put_zero_hash();\n";
+        }
+      }
+
+      // Emit active_fields bitvector literal
+      c += "        h.merkleize_progressive_with_active_fields(idx, &[";
+      for (size_t i = 0; i < container.active_fields_bitvector.size(); i++) {
+        if (i > 0) c += ", ";
+        char hex[8];
+        snprintf(hex, sizeof(hex), "0x%02x",
+                 container.active_fields_bitvector[i]);
+        c += hex;
+      }
+      c += "]);\n";
+    } else {
+      for (auto *field : container.all_fields) {
+        auto it = container.field_infos.find(field);
+        if (it == container.field_infos.end()) continue;
+        auto &info = it->second;
+        std::string fname = "self." + ToSnakeCase(field->name);
+        GenHashField(info, fname, &c, "        ");
+      }
+
+      c += "        h.merkleize(idx);\n";
+    }
     c += "    }\n";
   }
 
@@ -1114,6 +1213,41 @@ class SszRustGenerator : public BaseGenerator {
       case SszType::Container:
         c += ind + var + ".tree_hash_with(h);\n";
         break;
+      case SszType::ProgressiveContainer:
+        c += ind + var + ".tree_hash_with(h);\n";
+        break;
+      case SszType::ProgressiveList: {
+        // EIP-7916: use merkleize_progressive_with_mixin
+        if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
+          c += ind + "{\n";
+          c += ind + "    let sub = h.index();\n";
+          c += ind + "    h.append_bytes32(&" + var + ");\n";
+          c += ind + "    h.merkleize_progressive_with_mixin(sub, " + var +
+               ".len() as u64);\n";
+          c += ind + "}\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Container) {
+          c += ind + "{\n";
+          c += ind + "    let sub = h.index();\n";
+          c += ind + "    for item in &" + var +
+               " { item.tree_hash_with(h); }\n";
+          c += ind + "    h.merkleize_progressive_with_mixin(sub, " + var +
+               ".len() as u64);\n";
+          c += ind + "}\n";
+        } else if (info.elem_info) {
+          c += ind + "{\n";
+          c += ind + "    let sub = h.index();\n";
+          c += ind + "    for v in &" + var + " {\n";
+          GenAppendPrimitive(info.elem_info->ssz_type, "*v", code,
+                             ind + "        ");
+          c += ind + "    }\n";
+          c += ind + "    h.fill_up_to_32();\n";
+          c += ind + "    h.merkleize_progressive_with_mixin(sub, " + var +
+               ".len() as u64);\n";
+          c += ind + "}\n";
+        }
+        break;
+      }
       case SszType::Union: break;
     }
   }
@@ -1533,14 +1667,15 @@ class SszRustGenerator : public BaseGenerator {
     c += "    pub fn tree_hash_with(&self, h: &mut Hasher) {\n";
 
     // Check if any field requires owned-type delegation (lists, bitlists,
-    // dynamic containers). If so, delegate the entire hash to avoid
-    // partial merkleization issues.
+    // dynamic containers, progressive lists). If so, delegate the entire
+    // hash to avoid partial merkleization issues.
     bool has_complex = false;
     for (auto *field : container.all_fields) {
       auto it = container.field_infos.find(field);
       if (it == container.field_infos.end()) continue;
       auto &info = it->second;
       if (info.ssz_type == SszType::List ||
+          info.ssz_type == SszType::ProgressiveList ||
           info.ssz_type == SszType::Bitlist ||
           (info.ssz_type == SszType::Container && info.is_dynamic)) {
         has_complex = true;
@@ -1548,8 +1683,8 @@ class SszRustGenerator : public BaseGenerator {
       }
     }
 
-    if (has_complex) {
-      // Delegate to owned type for containers with lists/dynamic fields
+    if (container.is_progressive || has_complex) {
+      // Delegate to owned type for progressive or complex containers
       c += "        self.to_owned_type().tree_hash_with(h);\n";
     } else {
       // Pure fixed container — hash directly from buffer
@@ -1616,6 +1751,13 @@ class SszRustGenerator : public BaseGenerator {
       case SszType::Bitlist:
         c += ind + "h.put_bitlist(" + accessor + ", " +
              NumToString(info.limit) + ");\n";
+        break;
+      case SszType::ProgressiveContainer:
+        c += ind + accessor + ".tree_hash_with(h);\n"; break;
+      case SszType::ProgressiveList:
+        // Progressive lists always delegate to owned type
+        c += ind + "self.to_owned_type().tree_hash_with(h);\n";
+        c += ind + "return;\n";
         break;
       default: break;
     }

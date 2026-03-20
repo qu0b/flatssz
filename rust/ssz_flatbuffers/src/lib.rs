@@ -211,6 +211,110 @@ impl Hasher {
         self.buf[idx..idx + 32].copy_from_slice(&hash);
     }
 
+    pub fn put_zero_hash(&mut self) {
+        self.buf.extend_from_slice(&[0u8; 32]);
+    }
+
+    pub fn merkleize_progressive(&mut self, idx: usize) {
+        self.fill_up_to_32();
+        let input_len = self.buf.len() - idx;
+        let count = (input_len / 32) as usize;
+        let zh = zero_hashes();
+
+        if count == 0 {
+            self.buf.truncate(idx);
+            self.buf.extend_from_slice(&zh[0]);
+            return;
+        }
+        if count == 1 {
+            // Single chunk: already a 32-byte root
+            self.buf.truncate(idx + 32);
+            return;
+        }
+
+        // EIP-7916 progressive subtree merkleization.
+        // Subtree sizes: 1, 4, 16, 64, 256, ... (1, 4^1, 4^2, 4^3, ...)
+        // For each subtree: extract chunks, merkleize as binary tree (pad with
+        // zero hashes), produce a 32-byte root.
+        // Chain: hash(subtree_1_root, hash(subtree_2_root, hash(..., zero_hash)))
+
+        let mut subtree_sizes = Vec::new();
+        {
+            let mut remaining = count;
+            let first = std::cmp::min(1, remaining);
+            if first > 0 {
+                subtree_sizes.push(first);
+                remaining -= first;
+            }
+            let mut sz = 4usize;
+            while remaining > 0 {
+                let take = std::cmp::min(sz, remaining);
+                subtree_sizes.push(take);
+                remaining -= take;
+                sz = sz.saturating_mul(4);
+            }
+        }
+
+        // Compute root for each subtree via merkleize_impl
+        let mut subtree_roots = Vec::with_capacity(subtree_sizes.len());
+        let mut chunk_offset = idx;
+        let mut expected_cap = 1usize;
+        for &sz in &subtree_sizes {
+            // Use a temporary buffer for binary merkleization
+            let mut tmp_hasher = Hasher::new();
+            tmp_hasher.buf.extend_from_slice(
+                &self.buf[chunk_offset..chunk_offset + sz * 32],
+            );
+            tmp_hasher.merkleize_inner(0, expected_cap as u64);
+            let mut root = [0u8; 32];
+            root.copy_from_slice(&tmp_hasher.buf[..32]);
+            subtree_roots.push(root);
+            chunk_offset += sz * 32;
+            expected_cap = expected_cap.saturating_mul(4);
+        }
+
+        // Right-fold: hash(root_0, hash(root_1, hash(root_2, ... hash(root_n-1, zero_hash))))
+        let mut acc = zh[0];
+        for root in subtree_roots.into_iter().rev() {
+            self.tmp[..32].copy_from_slice(&root);
+            self.tmp[32..64].copy_from_slice(&acc);
+            let hash: [u8; 32] = Sha256::digest(&self.tmp).into();
+            acc = hash;
+        }
+
+        self.buf.truncate(idx);
+        self.buf.extend_from_slice(&acc);
+    }
+
+    pub fn merkleize_progressive_with_mixin(&mut self, idx: usize, num: u64) {
+        self.merkleize_progressive(idx);
+
+        // Mix in length: hash(root || encode(num))
+        debug_assert!(self.buf.len() == idx + 32);
+        self.tmp[..32].copy_from_slice(&self.buf[idx..idx + 32]);
+        self.tmp[32..40].copy_from_slice(&num.to_le_bytes());
+        self.tmp[40..64].fill(0);
+        let hash: [u8; 32] = Sha256::digest(&self.tmp).into();
+        self.buf[idx..idx + 32].copy_from_slice(&hash);
+    }
+
+    pub fn merkleize_progressive_with_active_fields(
+        &mut self,
+        idx: usize,
+        active_fields: &[u8],
+    ) {
+        self.merkleize_progressive(idx);
+
+        // Mix in active_fields bitvector: hash(root || pack_bits(active_fields))
+        debug_assert!(self.buf.len() == idx + 32);
+        self.tmp[..32].copy_from_slice(&self.buf[idx..idx + 32]);
+        self.tmp[32..64].fill(0);
+        let copy_len = std::cmp::min(active_fields.len(), 32);
+        self.tmp[32..32 + copy_len].copy_from_slice(&active_fields[..copy_len]);
+        let hash: [u8; 32] = Sha256::digest(&self.tmp).into();
+        self.buf[idx..idx + 32].copy_from_slice(&hash);
+    }
+
     fn merkleize_inner(&mut self, idx: usize, mut limit: u64) {
         let input_len = self.buf.len() - idx;
         let count = ((input_len + 31) / 32) as u64;
