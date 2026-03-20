@@ -1,0 +1,14 @@
+[package]
+name = "progressive-bench-rust"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ssz_flatbuffers = { path = "/home/framework/repos/flatbuffers/rust/ssz_flatbuffers" }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "progressive_bench"
+harness = false
