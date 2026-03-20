@@ -5,6 +5,7 @@ const Hasher = ssz.Hasher;
 const SignedBeaconBlock = deneb.SignedBeaconBlock;
 
 pub fn main() !void {
+    ssz.initHashtree();
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
     const data = try std.fs.cwd().readFileAlloc(allocator, "block-mainnet.ssz", 2 * 1024 * 1024);
@@ -44,14 +45,14 @@ pub fn main() !void {
     // HTR
     {
         const block = try SignedBeaconBlock.fromSszBytes(data);
-        for (0..50) |_| { var h = Hasher.init(allocator); block.message.treeHashWith(&h); _ = h.finish(); }
+        for (0..50) |_| { var h = Hasher.initWithAllocator(allocator); block.message.treeHashWith(&h); _ = h.finish(); }
         var timer = try std.time.Timer.start();
         const N: usize = 500;
-        for (0..N) |_| { var h = Hasher.init(allocator); block.message.treeHashWith(&h); _ = h.finish(); }
+        for (0..N) |_| { var h = Hasher.initWithAllocator(allocator); block.message.treeHashWith(&h); _ = h.finish(); }
         const ns = timer.read();
         std.debug.print("hash_tree_root: {d:.0} us/op\n", .{@as(f64, @floatFromInt(ns)) / @as(f64, @floatFromInt(N)) / 1000.0});
 
-        var h = Hasher.init(allocator); block.message.treeHashWith(&h);
+        var h = Hasher.initWithAllocator(allocator); block.message.treeHashWith(&h);
         const got = h.finish();
         if (!std.mem.eql(u8, &got, &expected)) {
             std.debug.print("HTR MISMATCH\n", .{});

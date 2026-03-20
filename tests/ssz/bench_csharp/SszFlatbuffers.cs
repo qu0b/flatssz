@@ -10,6 +10,7 @@ using System;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 
 namespace SszFlatbuffers
@@ -54,6 +55,17 @@ namespace SszFlatbuffers
 
     public class Hasher
     {
+        [DllImport("hashtree", CallingConvention = CallingConvention.Cdecl)]
+        private static extern int hashtree_init(IntPtr fcn);
+
+        [DllImport("hashtree", CallingConvention = CallingConvention.Cdecl)]
+        private static extern unsafe void hashtree_hash(byte* output, byte* input, ulong count);
+
+        static Hasher()
+        {
+            hashtree_init(IntPtr.Zero);
+        }
+
         private List<byte> buf;
         private byte[] tmp = new byte[64];
 
@@ -409,9 +421,7 @@ namespace SszFlatbuffers
                     buf.Add(0);
             }
 
-            using var sha = SHA256.Create();
-
-            // In-place layer-by-layer hashing
+            // In-place layer-by-layer hashing using hashtree batch SIMD SHA-256
             for (int i = 0; i < depth; i++)
             {
                 int layerLen = (buf.Count - idx) / 32;
@@ -424,14 +434,19 @@ namespace SszFlatbuffers
 
                 int pairs = (buf.Count - idx) / 64;
 
-                // Hash each pair in-place
-                var pairBuf = new byte[64];
+                // Batch hash all pairs at once via hashtree
+                var inputBuf = new byte[pairs * 64];
+                for (int p = 0; p < pairs * 64; p++)
+                    inputBuf[p] = buf[idx + p];
+
                 var outBuf = new byte[pairs * 32];
-                for (int p = 0; p < pairs; p++)
+                unsafe
                 {
-                    CopyFromBuf(idx + p * 64, pairBuf, 0, 64);
-                    byte[] h = sha.ComputeHash(pairBuf);
-                    Buffer.BlockCopy(h, 0, outBuf, p * 32, 32);
+                    fixed (byte* outp = outBuf)
+                    fixed (byte* inp = inputBuf)
+                    {
+                        hashtree_hash(outp, inp, (ulong)pairs);
+                    }
                 }
 
                 buf.RemoveRange(idx, buf.Count - idx);
