@@ -1,6 +1,6 @@
 # flatssz
 
-Cross-language SSZ code generation from [FlatBuffers](https://github.com/google/flatbuffers) schemas. Define Ethereum consensus layer types once in `.fbs` and generate Go and Rust code implementing marshal, unmarshal, and hash tree root. Supports EIP-7495 ProgressiveContainer and EIP-7916 ProgressiveList for forward-compatible schema evolution across Ethereum forks. Go backend uses [dynamic-ssz](https://github.com/pk910/dynamic-ssz) for SIMD-accelerated merkleization.
+Cross-language SSZ code generation from [FlatBuffers](https://github.com/google/flatbuffers) schemas. Define Ethereum consensus layer types once in `.fbs` and generate code for 7 languages implementing marshal, unmarshal, and hash tree root. Supports EIP-7495 ProgressiveContainer and EIP-7916 ProgressiveList for forward-compatible schema evolution across forks. Go and Rust backends use [dynamic-ssz](https://github.com/pk910/dynamic-ssz)/[hashtree](https://github.com/OffchainLabs/hashtree) for SIMD-accelerated merkleization.
 
 ## Quick Start
 
@@ -9,8 +9,13 @@ cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release && make -j
 ```
 
 ```bash
-./flatc --ssz-go   -o output/ schema.fbs   # Go (geth ecosystem)
-./flatc --ssz-rust -o output/ schema.fbs   # Rust (reth ecosystem)
+./flatc --ssz-go      -o output/ schema.fbs   # Go (geth)
+./flatc --ssz-rust    -o output/ schema.fbs   # Rust (reth)
+./flatc --ssz-ts      -o output/ schema.fbs   # TypeScript (Lodestar)
+./flatc --ssz-zig     -o output/ schema.fbs   # Zig (Lantern)
+./flatc --ssz-java    -o output/ schema.fbs   # Java (Besu/Teku)
+./flatc --ssz-csharp  -o output/ schema.fbs   # C# (Nethermind)
+./flatc --ssz-nim     -o output/ schema.fbs   # Nim (Nimbus)
 ```
 
 ```fbs
@@ -118,6 +123,11 @@ Both Go and Rust use batch SIMD SHA-256 via [hashtree](https://github.com/Offcha
 ```
 src/idl_gen_ssz_go.cpp      -- Go code generator
 src/idl_gen_ssz_rust.cpp    -- Rust code generator (owned + zero-copy views)
+src/idl_gen_ssz_ts.cpp      -- TypeScript code generator
+src/idl_gen_ssz_zig.cpp     -- Zig code generator
+src/idl_gen_ssz_java.cpp    -- Java code generator
+src/idl_gen_ssz_csharp.cpp  -- C# code generator
+src/idl_gen_ssz_nim.cpp     -- Nim code generator
 go/ssz/                      -- Go runtime (error types)
 rust/ssz_flatbuffers/        -- Rust runtime (Hasher, progressive merkleization)
 tests/ssz/                   -- Test schemas and benchmarks
