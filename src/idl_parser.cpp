@@ -2828,7 +2828,9 @@ bool Parser::SupportsAdvancedArrayFeatures() const {
             IDLOptions::kCSharp | IDLOptions::kJsonSchema | IDLOptions::kJson |
             IDLOptions::kBinary | IDLOptions::kRust | IDLOptions::kTs |
             IDLOptions::kSwift | IDLOptions::kSszGo |
-            IDLOptions::kSszRust)) == 0;
+            IDLOptions::kSszRust | IDLOptions::kSszTs |
+            IDLOptions::kSszZig | IDLOptions::kSszJava |
+            IDLOptions::kSszCSharp | IDLOptions::kSszNim)) == 0;
 }
 
 bool Parser::Supports64BitOffsets() const {
