@@ -31,6 +31,11 @@
 #include "idl_gen_go.h"
 #include "idl_gen_ssz_go.h"
 #include "idl_gen_ssz_rust.h"
+#include "idl_gen_ssz_ts.h"
+#include "idl_gen_ssz_zig.h"
+#include "idl_gen_ssz_java.h"
+#include "idl_gen_ssz_csharp.h"
+#include "idl_gen_ssz_nim.h"
 #include "idl_gen_java.h"
 #include "idl_gen_json_schema.h"
 #include "idl_gen_kotlin.h"
@@ -128,6 +133,36 @@ int main(int argc, const char* argv[]) {
           "", "ssz-rust", "",
           "Generate Rust SSZ encode/decode/hash files"},
       flatbuffers::NewSszRustCodeGenerator());
+
+  flatc.RegisterCodeGenerator(
+      flatbuffers::FlatCOption{
+          "", "ssz-ts", "",
+          "Generate TypeScript SSZ encode/decode/hash files"},
+      flatbuffers::NewSszTsCodeGenerator());
+
+  flatc.RegisterCodeGenerator(
+      flatbuffers::FlatCOption{
+          "", "ssz-zig", "",
+          "Generate Zig SSZ encode/decode/hash files"},
+      flatbuffers::NewSszZigCodeGenerator());
+
+  flatc.RegisterCodeGenerator(
+      flatbuffers::FlatCOption{
+          "", "ssz-java", "",
+          "Generate Java SSZ encode/decode/hash files"},
+      flatbuffers::NewSszJavaCodeGenerator());
+
+  flatc.RegisterCodeGenerator(
+      flatbuffers::FlatCOption{
+          "", "ssz-csharp", "",
+          "Generate C# SSZ encode/decode/hash files"},
+      flatbuffers::NewSszCSharpCodeGenerator());
+
+  flatc.RegisterCodeGenerator(
+      flatbuffers::FlatCOption{
+          "", "ssz-nim", "",
+          "Generate Nim SSZ encode/decode/hash files"},
+      flatbuffers::NewSszNimCodeGenerator());
 
   flatc.RegisterCodeGenerator(
       flatbuffers::FlatCOption{"j", "java", "",

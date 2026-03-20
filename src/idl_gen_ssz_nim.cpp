@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-#include "idl_gen_ssz_go.h"
+#include "idl_gen_ssz_nim.h"
 
 #include <algorithm>
 #include <cmath>
@@ -42,10 +42,10 @@
 
 namespace flatbuffers {
 
-namespace ssz_go {
+namespace ssz_nim {
 
 // ---------------------------------------------------------------------------
-// Phase 2: SSZ Type Resolution
+// Phase 2: SSZ Type Resolution (copied exactly from ssz_go)
 // ---------------------------------------------------------------------------
 
 enum class SszType {
@@ -104,28 +104,37 @@ struct SszContainerInfo {
 // Namer config
 // ---------------------------------------------------------------------------
 
-static std::set<std::string> GoKeywords() {
+static std::set<std::string> NimKeywords() {
   return {
-      "break",    "default",     "func",   "interface", "select",
-      "case",     "defer",       "go",     "map",       "struct",
-      "chan",      "else",        "goto",   "package",   "switch",
-      "const",    "fallthrough", "if",     "range",     "type",
-      "continue", "for",         "import", "return",    "var",
+      "addr",     "and",       "as",       "asm",       "bind",
+      "block",    "break",     "case",     "cast",      "concept",
+      "const",    "continue",  "converter","defer",     "discard",
+      "distinct", "div",       "do",       "elif",      "else",
+      "end",      "enum",      "except",   "export",    "finally",
+      "for",      "from",      "func",     "if",        "import",
+      "in",       "include",   "interface","is",        "isnot",
+      "iterator", "let",       "macro",    "method",    "mixin",
+      "mod",      "nil",       "not",      "notin",     "object",
+      "of",       "or",        "out",      "proc",      "ptr",
+      "raise",    "ref",       "return",   "shl",       "shr",
+      "static",   "template",  "try",      "tuple",     "type",
+      "using",    "var",       "when",     "while",     "xor",
+      "yield",
   };
 }
 
-static Namer::Config SszGoDefaultConfig() {
+static Namer::Config SszNimDefaultConfig() {
   return {/*types=*/Case::kKeep,
           /*constants=*/Case::kUnknown,
-          /*methods=*/Case::kUpperCamel,
-          /*functions=*/Case::kUpperCamel,
-          /*fields=*/Case::kUpperCamel,
+          /*methods=*/Case::kLowerCamel,
+          /*functions=*/Case::kLowerCamel,
+          /*fields=*/Case::kLowerCamel,
           /*variables=*/Case::kLowerCamel,
           /*variants=*/Case::kKeep,
           /*enum_variant_seperator=*/"",
           /*escape_keywords=*/Namer::Config::Escape::AfterConvertingCase,
           /*namespaces=*/Case::kKeep,
-          /*namespace_seperator=*/"__",
+          /*namespace_seperator=*/"_",
           /*object_prefix=*/"",
           /*object_suffix=*/"",
           /*keyword_prefix=*/"",
@@ -135,7 +144,7 @@ static Namer::Config SszGoDefaultConfig() {
           /*directories=*/Case::kKeep,
           /*output_path=*/"",
           /*filename_suffix=*/"_ssz",
-          /*filename_extension=*/".go"};
+          /*filename_extension=*/".nim"};
 }
 
 // Convert a CamelCase name to snake_case
@@ -158,42 +167,60 @@ static std::string ToSnakeCase(const std::string &input) {
   return result;
 }
 
+// Convert first char to lower for Nim camelCase field names
+static std::string ToCamelCase(const std::string &input) {
+  if (input.empty()) return input;
+  std::string result = input;
+  result[0] = static_cast<char>(tolower(result[0]));
+  return result;
+}
+
 // ---------------------------------------------------------------------------
 // Main Generator
 // ---------------------------------------------------------------------------
 
-class SszGoGenerator : public BaseGenerator {
+class SszNimGenerator : public BaseGenerator {
  public:
-  SszGoGenerator(const Parser &parser, const std::string &path,
-                 const std::string &file_name)
-      : BaseGenerator(parser, path, file_name, "", "", "go"),
-        namer_(WithFlagOptions(SszGoDefaultConfig(), parser.opts, path),
-               GoKeywords()) {}
+  SszNimGenerator(const Parser &parser, const std::string &path,
+                  const std::string &file_name)
+      : BaseGenerator(parser, path, file_name, "", "", "nim"),
+        namer_(WithFlagOptions(SszNimDefaultConfig(), parser.opts, path),
+               NimKeywords()) {}
 
   bool generate() override {
+    // Collect all container infos for all structs in this schema
+    std::vector<std::pair<const StructDef *, SszContainerInfo>> containers;
+
     for (auto it = parser_.structs_.vec.begin();
          it != parser_.structs_.vec.end(); ++it) {
       auto &struct_def = **it;
       if (struct_def.generated) continue;
 
-      // Resolve SSZ container info
       SszContainerInfo container;
       if (!AnalyzeContainer(struct_def, container)) return false;
-
-      // Generate code
-      std::string code;
-      if (!GenerateType(struct_def, container, &code)) return false;
-
-      if (!SaveType(struct_def, code)) return false;
+      containers.push_back({&struct_def, std::move(container)});
     }
-    return true;
+
+    if (containers.empty()) return true;
+
+    // Generate all types into one file
+    std::string code;
+    for (size_t i = 0; i < containers.size(); i++) {
+      auto &struct_def = *containers[i].first;
+      auto &container = containers[i].second;
+
+      if (!GenerateType(struct_def, container, &code)) return false;
+      if (i + 1 < containers.size()) code += "\n";
+    }
+
+    return SaveFile(containers[0].first->defined_namespace, code);
   }
 
  private:
   const IdlNamer namer_;
 
   // -----------------------------------------------------------------------
-  // Type resolution
+  // Type resolution (copied exactly from ssz_go)
   // -----------------------------------------------------------------------
 
   bool ResolveSszFieldInfo(const FieldDef &field, SszFieldInfo &info) {
@@ -321,7 +348,7 @@ class SszGoGenerator : public BaseGenerator {
       return true;
     }
 
-    // Check for progressive list (EIP-7916) — no ssz_max needed
+    // Check for progressive list (EIP-7916) -- no ssz_max needed
     if (attrs.Lookup("ssz_progressive_list")) {
       info.ssz_type = SszType::ProgressiveList;
       info.fixed_size = 0;
@@ -387,7 +414,7 @@ class SszGoGenerator : public BaseGenerator {
       return true;
     }
 
-    // Fixed-size array → SSZ Vector
+    // Fixed-size array -> SSZ Vector
     info.ssz_type = SszType::Vector;
 
     // Resolve element type
@@ -428,7 +455,7 @@ class SszGoGenerator : public BaseGenerator {
         info.fixed_size = 8;
         break;
       case BASE_TYPE_STRING: {
-        // String element in a vector → List[List[byte, inner_max], outer_max]
+        // String element in a vector -> List[List[byte, inner_max], outer_max]
         info.ssz_type = SszType::List;
         info.fixed_size = 0;
         info.is_dynamic = true;
@@ -509,10 +536,10 @@ class SszGoGenerator : public BaseGenerator {
   }
 
   // -----------------------------------------------------------------------
-  // Go type helpers
+  // Nim type helpers
   // -----------------------------------------------------------------------
 
-  std::string GoTypeName(const SszFieldInfo &info, const FieldDef &field) {
+  std::string NimTypeName(const SszFieldInfo &info, const FieldDef &field) {
     switch (info.ssz_type) {
       case SszType::Bool:
         return "bool";
@@ -525,50 +552,49 @@ class SszGoGenerator : public BaseGenerator {
       case SszType::Uint64:
         return "uint64";
       case SszType::Uint128:
-        return "[16]byte";
+        return "array[16, byte]";
       case SszType::Uint256:
-        return "[32]byte";
+        return "array[32, byte]";
       case SszType::Container:
         if (info.struct_def) { return info.struct_def->name; }
         return "UNKNOWN";
       case SszType::Vector: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          return "[" + NumToString(info.limit) + "]byte";
+          return "array[" + NumToString(info.limit) + ", byte]";
         }
         if (info.elem_info) {
-          return "[" + NumToString(info.limit) + "]" +
-                 GoElemTypeName(*info.elem_info);
+          return "array[" + NumToString(info.limit) + ", " +
+                 NimElemTypeName(*info.elem_info) + "]";
         }
         return "UNKNOWN";
       }
       case SszType::ProgressiveList:
       case SszType::List: {
-        // String fields map to []byte in SSZ Go
         if (field.value.type.base_type == BASE_TYPE_STRING) {
-          return "[]byte";
+          return "seq[byte]";
         }
         if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          return "[]byte";
+          return "seq[byte]";
         }
         if (info.elem_info) {
-          return "[]" + GoElemTypeName(*info.elem_info);
+          return "seq[" + NimElemTypeName(*info.elem_info) + "]";
         }
-        return "[]byte";
+        return "seq[byte]";
       }
       case SszType::Bitlist:
-        return "[]byte";
+        return "seq[byte]";
       case SszType::Bitvector:
-        return "[" + NumToString((info.bitsize + 7) / 8) + "]byte";
+        return "array[" + NumToString((info.bitsize + 7) / 8) + ", byte]";
       case SszType::ProgressiveContainer:
         if (info.struct_def) { return info.struct_def->name; }
         return "UNKNOWN";
       case SszType::Union:
-        return "interface{}";
+        return "SszUnion";
     }
     return "UNKNOWN";
   }
 
-  std::string GoElemTypeName(const SszFieldInfo &info) {
+  static std::string NimElemTypeName(const SszFieldInfo &info) {
     switch (info.ssz_type) {
       case SszType::Bool:
         return "bool";
@@ -582,15 +608,19 @@ class SszGoGenerator : public BaseGenerator {
         return "uint64";
       case SszType::Container:
         if (info.struct_def) {
-          return "*" + info.struct_def->name;
+          return info.struct_def->name;
         }
         return "UNKNOWN";
       case SszType::List:
-        // Nested list (e.g. [][]byte for Transactions)
-        return "[]byte";
+        // Nested list (e.g. seq[seq[byte]] for Transactions)
+        return "seq[byte]";
       default:
         return "UNKNOWN";
     }
+  }
+
+  std::string NimFieldName(const FieldDef &field) {
+    return ToCamelCase(namer_.Field(field));
   }
 
   // -----------------------------------------------------------------------
@@ -601,115 +631,109 @@ class SszGoGenerator : public BaseGenerator {
                     const SszContainerInfo &container, std::string *code) {
     std::string &c = *code;
 
-    // Generate struct definition
-    GenGoStruct(struct_def, container, &c);
+    // Generate type definition
+    GenNimType(struct_def, container, &c);
     c += "\n";
 
-    // Generate SizeSSZ
-    GenSizeSSZ(struct_def, container, &c);
+    // Generate sszBytesLen
+    GenSszBytesLen(struct_def, container, &c);
     c += "\n";
 
-    // Generate MarshalSSZTo
+    // Generate marshalSSZTo
     GenMarshalSSZTo(struct_def, container, &c);
     c += "\n";
 
-    // Generate MarshalSSZ convenience
+    // Generate marshalSSZ convenience
     GenMarshalSSZ(struct_def, &c);
     c += "\n";
 
-    // Generate UnmarshalSSZ
-    GenUnmarshalSSZ(struct_def, container, &c);
+    // Generate fromSSZBytes
+    GenFromSSZBytes(struct_def, container, &c);
     c += "\n";
 
-    // Generate HashTreeRoot
+    // Generate hashTreeRoot
     GenHashTreeRoot(struct_def, &c);
     c += "\n";
 
-    // Generate HashTreeRootWith
+    // Generate hashTreeRootWith
     GenHashTreeRootWith(struct_def, container, &c);
 
     return true;
   }
 
   // -----------------------------------------------------------------------
-  // Go struct generation
+  // Nim type definition generation
   // -----------------------------------------------------------------------
 
-  void GenGoStruct(const StructDef &struct_def,
-                   const SszContainerInfo &container, std::string *code) {
+  void GenNimType(const StructDef &struct_def,
+                  const SszContainerInfo &container, std::string *code) {
     std::string &c = *code;
-    c += "type " + struct_def.name + " struct {\n";
+    c += "type " + struct_def.name + "* = object\n";
     for (auto *field : container.all_fields) {
       auto it = container.field_infos.find(field);
       if (it == container.field_infos.end()) continue;
       auto &info = it->second;
-      c += "\t" + namer_.Field(*field) + " " + GoTypeName(info, *field);
-      c += " `ssz:\"" + field->name + "\"`\n";
+      c += "  " + NimFieldName(*field) + "*: " +
+           NimTypeName(info, *field) + "\n";
     }
-    c += "}\n";
   }
 
   // -----------------------------------------------------------------------
-  // SizeSSZ generation
+  // sszBytesLen generation
   // -----------------------------------------------------------------------
 
-  void GenSizeSSZ(const StructDef &struct_def,
-                  const SszContainerInfo &container, std::string *code) {
+  void GenSszBytesLen(const StructDef &struct_def,
+                      const SszContainerInfo &container, std::string *code) {
     std::string &c = *code;
     std::string type_name = struct_def.name;
 
-    c += "func (t *" + type_name + ") SizeSSZ() int {\n";
+    c += "proc sszBytesLen*(t: " + type_name + "): int =\n";
 
     if (container.is_fixed) {
-      c += "\treturn " + NumToString(container.static_size) + "\n";
+      c += "  result = " + NumToString(container.static_size) + "\n";
     } else {
-      c += "\tsize := " + NumToString(container.static_size) + "\n";
+      c += "  result = " + NumToString(container.static_size) + "\n";
       for (auto *field : container.dynamic_fields) {
         auto it = container.field_infos.find(field);
         if (it == container.field_infos.end()) continue;
         auto &info = it->second;
-        std::string fname = "t." + namer_.Field(*field);
-        GenSizeField(info, fname, *field, &c, "\t");
+        std::string fname = "t." + NimFieldName(*field);
+        GenSizeField(info, fname, &c, "  ");
       }
-      c += "\treturn size\n";
     }
-    c += "}\n";
   }
 
   void GenSizeField(const SszFieldInfo &info, const std::string &var,
-                    const FieldDef & /*field*/, std::string *code,
-                    const std::string &indent) {
+                    std::string *code, const std::string &indent) {
     std::string &c = *code;
     switch (info.ssz_type) {
       case SszType::ProgressiveList:
       case SszType::List: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
-          // List of byte lists ([][]byte): offsets + each element's length
-          c += indent + "size += len(" + var + ") * 4\n";
-          c += indent + "for _, item := range " + var + " {\n";
-          c += indent + "\tsize += len(item)\n";
-          c += indent + "}\n";
+          // List of byte lists: offsets + each element's length
+          c += indent + "result += len(" + var + ") * 4\n";
+          c += indent + "for item in " + var + ":\n";
+          c += indent + "  result += len(item)\n";
         } else if (info.elem_info &&
             info.elem_info->ssz_type == SszType::Container &&
             info.elem_info->is_dynamic) {
           // Dynamic element list: offsets + each element's size
-          c += indent + "size += len(" + var + ") * 4\n";
-          c += indent + "for _, item := range " + var + " {\n";
-          c += indent + "\tsize += item.SizeSSZ()\n";
-          c += indent + "}\n";
+          c += indent + "result += len(" + var + ") * 4\n";
+          c += indent + "for item in " + var + ":\n";
+          c += indent + "  result += sszBytesLen(item)\n";
         } else if (info.elem_info) {
-          c += indent + "size += len(" + var + ") * " +
+          c += indent + "result += len(" + var + ") * " +
                NumToString(info.elem_info->fixed_size) + "\n";
         } else {
-          c += indent + "size += len(" + var + ")\n";
+          c += indent + "result += len(" + var + ")\n";
         }
         break;
       }
       case SszType::Bitlist:
-        c += indent + "size += len(" + var + ")\n";
+        c += indent + "result += len(" + var + ")\n";
         break;
       case SszType::Container:
-        c += indent + "size += " + var + ".SizeSSZ()\n";
+        c += indent + "result += sszBytesLen(" + var + ")\n";
         break;
       default:
         break;
@@ -717,16 +741,15 @@ class SszGoGenerator : public BaseGenerator {
   }
 
   // -----------------------------------------------------------------------
-  // MarshalSSZ generation
+  // marshalSSZ generation
   // -----------------------------------------------------------------------
 
   void GenMarshalSSZ(const StructDef &struct_def, std::string *code) {
     std::string &c = *code;
     std::string type_name = struct_def.name;
-    c += "func (t *" + type_name +
-         ") MarshalSSZ() ([]byte, error) {\n";
-    c += "\treturn t.MarshalSSZTo(make([]byte, 0, t.SizeSSZ()))\n";
-    c += "}\n";
+    c += "proc marshalSSZ*(t: " + type_name + "): seq[byte] =\n";
+    c += "  result = newSeqOfCap[byte](sszBytesLen(t))\n";
+    c += "  marshalSSZTo(t, result)\n";
   }
 
   void GenMarshalSSZTo(const StructDef &struct_def,
@@ -734,21 +757,20 @@ class SszGoGenerator : public BaseGenerator {
     std::string &c = *code;
     std::string type_name = struct_def.name;
 
-    c += "func (t *" + type_name +
-         ") MarshalSSZTo(buf []byte) (dst []byte, err error) {\n";
-    c += "\tdst = buf\n";
+    c += "proc marshalSSZTo*(t: " + type_name +
+         ", buf: var seq[byte]) =\n";
 
     if (container.dynamic_fields.empty()) {
       // All-fixed container: just marshal fields sequentially
       for (auto *field : container.all_fields) {
         auto it = container.field_infos.find(field);
         if (it == container.field_infos.end()) continue;
-        GenMarshalField(it->second, "t." + namer_.Field(*field), *field, &c,
-                        "\t");
+        GenMarshalField(it->second, "t." + NimFieldName(*field),
+                        &c, "  ");
       }
     } else {
       // Container with dynamic fields
-      c += "\tdstlen := len(dst)\n";
+      c += "  let dstStart = len(buf)\n";
       c += "\n";
 
       // Static section: fixed fields inline, offsets for dynamic fields
@@ -757,16 +779,17 @@ class SszGoGenerator : public BaseGenerator {
         auto it = container.field_infos.find(field);
         if (it == container.field_infos.end()) continue;
         auto &info = it->second;
-        std::string fname = "t." + namer_.Field(*field);
+        std::string fname = "t." + NimFieldName(*field);
 
         if (info.is_dynamic) {
-          c += "\t// Offset for '" + field->name + "'\n";
-          c += "\toffset" + NumToString(offset_idx) + " := len(dst)\n";
-          c += "\tdst = append(dst, 0, 0, 0, 0)\n";
+          c += "  # Offset for '" + field->name + "'\n";
+          c += "  let offsetPos" + NumToString(offset_idx) +
+               " = len(buf)\n";
+          c += "  buf.add([byte 0, 0, 0, 0])\n";
           offset_idx++;
         } else {
-          c += "\t// Field '" + field->name + "'\n";
-          GenMarshalField(info, fname, *field, &c, "\t");
+          c += "  # Field '" + field->name + "'\n";
+          GenMarshalField(info, fname, &c, "  ");
         }
       }
 
@@ -778,78 +801,77 @@ class SszGoGenerator : public BaseGenerator {
         auto it = container.field_infos.find(field);
         if (it == container.field_infos.end()) continue;
         auto &info = it->second;
-        std::string fname = "t." + namer_.Field(*field);
+        std::string fname = "t." + NimFieldName(*field);
 
         if (info.is_dynamic) {
-          c += "\t// Dynamic field '" + field->name + "'\n";
-          c += "\tbinary.LittleEndian.PutUint32(dst[offset" +
-               NumToString(offset_idx) +
-               ":], uint32(len(dst)-dstlen))\n";
-          GenMarshalField(info, fname, *field, &c, "\t");
+          c += "  # Dynamic field '" + field->name + "'\n";
+          c += "  block:\n";
+          c += "    let offset = uint32(len(buf) - dstStart)\n";
+          c += "    var tmp: array[4, byte]\n";
+          c += "    littleEndian32(addr tmp[0], unsafeAddr offset)\n";
+          c += "    copyMem(addr buf[offsetPos" +
+               NumToString(offset_idx) + "], addr tmp[0], 4)\n";
+          GenMarshalField(info, fname, &c, "  ");
           offset_idx++;
         }
       }
     }
-
-    c += "\treturn dst, err\n";
-    c += "}\n";
   }
 
   void GenMarshalField(const SszFieldInfo &info, const std::string &var,
-                       const FieldDef & /*field*/, std::string *code,
-                       const std::string &indent) {
+                       std::string *code, const std::string &indent) {
     std::string &c = *code;
     switch (info.ssz_type) {
       case SszType::Bool:
-        c += indent + "if " + var + " {\n";
-        c += indent + "\tdst = append(dst, 1)\n";
-        c += indent + "} else {\n";
-        c += indent + "\tdst = append(dst, 0)\n";
-        c += indent + "}\n";
+        c += indent + "if " + var + ":\n";
+        c += indent + "  buf.add(1'u8)\n";
+        c += indent + "else:\n";
+        c += indent + "  buf.add(0'u8)\n";
         break;
 
       case SszType::Uint8:
-        c += indent + "dst = append(dst, " + var + ")\n";
+        c += indent + "buf.add(" + var + ")\n";
         break;
 
-      case SszType::Uint16:
-        c += indent + "dst = binary.LittleEndian.AppendUint16(dst, " + var +
-             ")\n";
+      case SszType::Uint16: {
+        c += indent + "block:\n";
+        c += indent + "  var tmp: array[2, byte]\n";
+        c += indent + "  var v = " + var + "\n";
+        c += indent + "  littleEndian16(addr tmp[0], addr v)\n";
+        c += indent + "  buf.add(tmp)\n";
         break;
+      }
 
-      case SszType::Uint32:
-        c += indent + "dst = binary.LittleEndian.AppendUint32(dst, " + var +
-             ")\n";
+      case SszType::Uint32: {
+        c += indent + "block:\n";
+        c += indent + "  var tmp: array[4, byte]\n";
+        c += indent + "  var v = " + var + "\n";
+        c += indent + "  littleEndian32(addr tmp[0], addr v)\n";
+        c += indent + "  buf.add(tmp)\n";
         break;
+      }
 
-      case SszType::Uint64:
-        c += indent + "dst = binary.LittleEndian.AppendUint64(dst, " + var +
-             ")\n";
+      case SszType::Uint64: {
+        c += indent + "block:\n";
+        c += indent + "  var tmp: array[8, byte]\n";
+        c += indent + "  var v = " + var + "\n";
+        c += indent + "  littleEndian64(addr tmp[0], addr v)\n";
+        c += indent + "  buf.add(tmp)\n";
         break;
+      }
 
       case SszType::Uint128:
       case SszType::Uint256:
-        c += indent + "dst = append(dst, " + var + "[:]...)\n";
+        c += indent + "buf.add(" + var + ")\n";
         break;
 
       case SszType::Vector: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          c += indent + "dst = append(dst, " + var + "[:]...)\n";
+          c += indent + "buf.add(" + var + ")\n";
         } else if (info.elem_info &&
                    info.elem_info->ssz_type == SszType::Container) {
-          c += indent + "for i := range " + var + " {\n";
-          if (info.elem_info->is_dynamic) {
-            c += indent + "\tif dst, err = " + var +
-                 "[i].MarshalSSZTo(dst); err != nil {\n";
-            c += indent + "\t\treturn nil, err\n";
-            c += indent + "\t}\n";
-          } else {
-            c += indent + "\tif dst, err = " + var +
-                 "[i].MarshalSSZTo(dst); err != nil {\n";
-            c += indent + "\t\treturn nil, err\n";
-            c += indent + "\t}\n";
-          }
-          c += indent + "}\n";
+          c += indent + "for i in 0 ..< len(" + var + "):\n";
+          c += indent + "  marshalSSZTo(" + var + "[i], buf)\n";
         } else if (info.elem_info) {
           GenMarshalPrimitiveArray(info, var, code, indent);
         }
@@ -859,73 +881,69 @@ class SszGoGenerator : public BaseGenerator {
       case SszType::ProgressiveList:
       case SszType::List: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
-          // List of byte lists ([][]byte): offset-based dynamic encoding
-          c += indent + "{\n";
-          c += indent + "\tlistStart := len(dst)\n";
-          c += indent + "\tfor range " + var + " {\n";
-          c += indent + "\t\tdst = append(dst, 0, 0, 0, 0)\n";
-          c += indent + "\t}\n";
-          c += indent + "\tfor i, item := range " + var + " {\n";
+          // List of byte lists: offset-based dynamic encoding
+          c += indent + "block:\n";
+          c += indent + "  let listStart = len(buf)\n";
+          c += indent + "  for i in 0 ..< len(" + var + "):\n";
+          c += indent + "    buf.add([byte 0, 0, 0, 0])\n";
+          c += indent + "  for i in 0 ..< len(" + var + "):\n";
+          c += indent + "    block:\n";
+          c += indent + "      let offset = uint32(len(buf) - listStart)\n";
+          c += indent + "      var tmp: array[4, byte]\n";
           c += indent +
-               "\t\tbinary.LittleEndian.PutUint32(dst[listStart+i*4:], "
-               "uint32(len(dst)-listStart))\n";
-          c += indent + "\t\tdst = append(dst, item...)\n";
-          c += indent + "\t}\n";
-          c += indent + "}\n";
-        } else if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          c += indent + "dst = append(dst, " + var + "...)\n";
+               "      littleEndian32(addr tmp[0], unsafeAddr offset)\n";
+          c += indent +
+               "      copyMem(addr buf[listStart + i * 4], addr tmp[0], 4)\n";
+          c += indent + "    buf.add(" + var + "[i])\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Uint8) {
+          c += indent + "buf.add(" + var + ")\n";
         } else if (info.elem_info &&
                    info.elem_info->ssz_type == SszType::Container) {
           if (info.elem_info->is_dynamic) {
             // Dynamic element list: write offsets then data
-            c += indent + "{\n";
-            c += indent + "\tlistStart := len(dst)\n";
-            c += indent + "\tfor range " + var + " {\n";
-            c += indent + "\t\tdst = append(dst, 0, 0, 0, 0)\n";
-            c += indent + "\t}\n";
-            c += indent + "\tfor i, item := range " + var + " {\n";
+            c += indent + "block:\n";
+            c += indent + "  let listStart = len(buf)\n";
+            c += indent + "  for i in 0 ..< len(" + var + "):\n";
+            c += indent + "    buf.add([byte 0, 0, 0, 0])\n";
+            c += indent + "  for i in 0 ..< len(" + var + "):\n";
+            c += indent + "    block:\n";
             c += indent +
-                 "\t\tbinary.LittleEndian.PutUint32(dst[listStart+i*4:], "
-                 "uint32(len(dst)-listStart))\n";
+                 "      let offset = uint32(len(buf) - listStart)\n";
+            c += indent + "      var tmp: array[4, byte]\n";
             c += indent +
-                 "\t\tif dst, err = item.MarshalSSZTo(dst); err != nil {\n";
-            c += indent + "\t\t\treturn nil, err\n";
-            c += indent + "\t\t}\n";
-            c += indent + "\t}\n";
-            c += indent + "}\n";
+                 "      littleEndian32(addr tmp[0], unsafeAddr offset)\n";
+            c += indent +
+                 "      copyMem(addr buf[listStart + i * 4],"
+                 " addr tmp[0], 4)\n";
+            c += indent + "    marshalSSZTo(" + var + "[i], buf)\n";
           } else {
-            c += indent + "for _, item := range " + var + " {\n";
-            c += indent +
-                 "\tif dst, err = item.MarshalSSZTo(dst); err != nil {\n";
-            c += indent + "\t\treturn nil, err\n";
-            c += indent + "\t}\n";
-            c += indent + "}\n";
+            c += indent + "for item in " + var + ":\n";
+            c += indent + "  marshalSSZTo(item, buf)\n";
           }
         } else if (info.elem_info) {
           GenMarshalPrimitiveSlice(info, var, code, indent);
         } else {
-          c += indent + "dst = append(dst, " + var + "...)\n";
+          c += indent + "buf.add(" + var + ")\n";
         }
         break;
       }
 
       case SszType::Bitlist:
-        c += indent + "dst = append(dst, " + var + "...)\n";
+        c += indent + "buf.add(" + var + ")\n";
         break;
 
       case SszType::Bitvector:
-        c += indent + "dst = append(dst, " + var + "[:]...)\n";
+        c += indent + "buf.add(" + var + ")\n";
         break;
 
-      case SszType::ProgressiveContainer:
       case SszType::Container:
-        c += indent + "if dst, err = " + var +
-             ".MarshalSSZTo(dst); err != nil {\n";
-        c += indent + "\treturn nil, err\n";
-        c += indent + "}\n";
+      case SszType::ProgressiveContainer:
+        c += indent + "marshalSSZTo(" + var + ", buf)\n";
         break;
 
       case SszType::Union:
+        // Union marshaling would go here
         break;
     }
   }
@@ -934,76 +952,93 @@ class SszGoGenerator : public BaseGenerator {
                                 const std::string &var, std::string *code,
                                 const std::string &indent) {
     std::string &c = *code;
-    c += indent + "for i := range " + var + " {\n";
+    c += indent + "for i in 0 ..< len(" + var + "):\n";
     switch (info.elem_info->ssz_type) {
       case SszType::Bool:
-        c += indent + "\tif " + var + "[i] {\n";
-        c += indent + "\t\tdst = append(dst, 1)\n";
-        c += indent + "\t} else {\n";
-        c += indent + "\t\tdst = append(dst, 0)\n";
-        c += indent + "\t}\n";
+        c += indent + "  if " + var + "[i]:\n";
+        c += indent + "    buf.add(1'u8)\n";
+        c += indent + "  else:\n";
+        c += indent + "    buf.add(0'u8)\n";
         break;
       case SszType::Uint16:
-        c += indent + "\tdst = binary.LittleEndian.AppendUint16(dst, " + var +
-             "[i])\n";
+        c += indent + "  block:\n";
+        c += indent + "    var tmp: array[2, byte]\n";
+        c += indent + "    var v = " + var + "[i]\n";
+        c += indent + "    littleEndian16(addr tmp[0], addr v)\n";
+        c += indent + "    buf.add(tmp)\n";
         break;
       case SszType::Uint32:
-        c += indent + "\tdst = binary.LittleEndian.AppendUint32(dst, " + var +
-             "[i])\n";
+        c += indent + "  block:\n";
+        c += indent + "    var tmp: array[4, byte]\n";
+        c += indent + "    var v = " + var + "[i]\n";
+        c += indent + "    littleEndian32(addr tmp[0], addr v)\n";
+        c += indent + "    buf.add(tmp)\n";
         break;
       case SszType::Uint64:
-        c += indent + "\tdst = binary.LittleEndian.AppendUint64(dst, " + var +
-             "[i])\n";
+        c += indent + "  block:\n";
+        c += indent + "    var tmp: array[8, byte]\n";
+        c += indent + "    var v = " + var + "[i]\n";
+        c += indent + "    littleEndian64(addr tmp[0], addr v)\n";
+        c += indent + "    buf.add(tmp)\n";
         break;
       default:
         break;
     }
-    c += indent + "}\n";
   }
 
   void GenMarshalPrimitiveSlice(const SszFieldInfo &info,
                                 const std::string &var, std::string *code,
                                 const std::string &indent) {
     std::string &c = *code;
-    c += indent + "for _, v := range " + var + " {\n";
+    c += indent + "for v in " + var + ":\n";
     switch (info.elem_info->ssz_type) {
       case SszType::Bool:
-        c += indent + "\tif v {\n";
-        c += indent + "\t\tdst = append(dst, 1)\n";
-        c += indent + "\t} else {\n";
-        c += indent + "\t\tdst = append(dst, 0)\n";
-        c += indent + "\t}\n";
+        c += indent + "  if v:\n";
+        c += indent + "    buf.add(1'u8)\n";
+        c += indent + "  else:\n";
+        c += indent + "    buf.add(0'u8)\n";
         break;
       case SszType::Uint16:
-        c += indent + "\tdst = binary.LittleEndian.AppendUint16(dst, v)\n";
+        c += indent + "  block:\n";
+        c += indent + "    var tmp: array[2, byte]\n";
+        c += indent + "    var vv = v\n";
+        c += indent + "    littleEndian16(addr tmp[0], addr vv)\n";
+        c += indent + "    buf.add(tmp)\n";
         break;
       case SszType::Uint32:
-        c += indent + "\tdst = binary.LittleEndian.AppendUint32(dst, v)\n";
+        c += indent + "  block:\n";
+        c += indent + "    var tmp: array[4, byte]\n";
+        c += indent + "    var vv = v\n";
+        c += indent + "    littleEndian32(addr tmp[0], addr vv)\n";
+        c += indent + "    buf.add(tmp)\n";
         break;
       case SszType::Uint64:
-        c += indent + "\tdst = binary.LittleEndian.AppendUint64(dst, v)\n";
+        c += indent + "  block:\n";
+        c += indent + "    var tmp: array[8, byte]\n";
+        c += indent + "    var vv = v\n";
+        c += indent + "    littleEndian64(addr tmp[0], addr vv)\n";
+        c += indent + "    buf.add(tmp)\n";
         break;
       default:
         break;
     }
-    c += indent + "}\n";
   }
 
   // -----------------------------------------------------------------------
-  // UnmarshalSSZ generation
+  // fromSSZBytes generation
   // -----------------------------------------------------------------------
 
-  void GenUnmarshalSSZ(const StructDef &struct_def,
+  void GenFromSSZBytes(const StructDef &struct_def,
                        const SszContainerInfo &container, std::string *code) {
     std::string &c = *code;
     std::string type_name = struct_def.name;
 
-    c += "func (t *" + type_name + ") UnmarshalSSZ(buf []byte) error {\n";
+    c += "proc fromSSZBytes*(T: typedesc[" + type_name +
+         "], data: openArray[byte]): " + type_name + " =\n";
 
     // Validate minimum size
-    c += "\tif len(buf) < " + NumToString(container.static_size) + " {\n";
-    c += "\t\treturn ssz.ErrBufferTooSmall\n";
-    c += "\t}\n\n";
+    c += "  if len(data) < " + NumToString(container.static_size) + ":\n";
+    c += "    raise newException(SszError, \"buffer too small\")\n";
 
     if (container.dynamic_fields.empty()) {
       // All-fixed container
@@ -1012,8 +1047,8 @@ class SszGoGenerator : public BaseGenerator {
         auto it = container.field_infos.find(field);
         if (it == container.field_infos.end()) continue;
         auto &info = it->second;
-        std::string fname = "t." + namer_.Field(*field);
-        GenUnmarshalField(info, fname, *field, offset, &c, "\t");
+        std::string fname = "result." + NimFieldName(*field);
+        GenUnmarshalField(info, fname, offset, &c, "  ");
         offset += info.fixed_size;
       }
     } else {
@@ -1027,31 +1062,31 @@ class SszGoGenerator : public BaseGenerator {
         auto it = container.field_infos.find(field);
         if (it == container.field_infos.end()) continue;
         auto &info = it->second;
-        std::string fname = "t." + namer_.Field(*field);
+        std::string fname = "result." + NimFieldName(*field);
 
         if (info.is_dynamic) {
-          c += "\toffset" + NumToString(dyn_idx) +
-               " := int(binary.LittleEndian.Uint32(buf[" +
-               NumToString(offset) + ":" + NumToString(offset + 4) + "]))\n";
+          c += "  var offset" + NumToString(dyn_idx) + ": uint32\n";
+          c += "  littleEndian32(addr offset" + NumToString(dyn_idx) +
+               ", unsafeAddr data[" + NumToString(offset) + "])\n";
+          c += "  let off" + NumToString(dyn_idx) +
+               " = int(offset" + NumToString(dyn_idx) + ")\n";
           dyn_offset_names.push_back({field, dyn_idx});
 
           // Validate first offset equals static size
           if (dyn_idx == 0) {
-            c += "\tif offset0 != " + NumToString(container.static_size) +
-                 " {\n";
-            c += "\t\treturn ssz.ErrInvalidOffset\n";
-            c += "\t}\n";
+            c += "  if off0 != " + NumToString(container.static_size) +
+                 ":\n";
+            c += "    raise newException(SszError, \"invalid offset\")\n";
           } else {
-            c += "\tif offset" + NumToString(dyn_idx) + " < offset" +
-                 NumToString(dyn_idx - 1) + " || offset" +
-                 NumToString(dyn_idx) + " > len(buf) {\n";
-            c += "\t\treturn ssz.ErrInvalidOffset\n";
-            c += "\t}\n";
+            c += "  if off" + NumToString(dyn_idx) + " < off" +
+                 NumToString(dyn_idx - 1) + " or off" +
+                 NumToString(dyn_idx) + " > len(data):\n";
+            c += "    raise newException(SszError, \"invalid offset\")\n";
           }
           offset += 4;
           dyn_idx++;
         } else {
-          GenUnmarshalField(info, fname, *field, offset, &c, "\t");
+          GenUnmarshalField(info, fname, offset, &c, "  ");
           offset += info.fixed_size;
         }
       }
@@ -1065,82 +1100,77 @@ class SszGoGenerator : public BaseGenerator {
         auto it = container.field_infos.find(field);
         if (it == container.field_infos.end()) continue;
         auto &info = it->second;
-        std::string fname = "t." + namer_.Field(*field);
+        std::string fname = "result." + NimFieldName(*field);
 
-        std::string start_off = "offset" + NumToString(oidx);
+        std::string start_off = "off" + NumToString(oidx);
         std::string end_off;
         if (i + 1 < dyn_offset_names.size()) {
-          end_off = "offset" + NumToString(dyn_offset_names[i + 1].second);
+          end_off = "off" + NumToString(dyn_offset_names[i + 1].second);
         } else {
-          end_off = "len(buf)";
+          end_off = "len(data)";
         }
 
-        c += "\t{\n";
-        c += "\t\tbuf := buf[" + start_off + ":" + end_off + "]\n";
-        GenUnmarshalDynField(info, fname, *field, &c, "\t\t");
-        c += "\t}\n";
+        c += "  block:\n";
+        c += "    let dynData = data.toOpenArray(" + start_off + ", " +
+             end_off + " - 1)\n";
+        GenUnmarshalDynField(info, fname, *field, &c, "    ");
       }
     }
-
-    c += "\treturn nil\n";
-    c += "}\n";
   }
 
   void GenUnmarshalField(const SszFieldInfo &info, const std::string &var,
-                         const FieldDef & /*field*/, uint32_t offset,
-                         std::string *code, const std::string &indent) {
+                         uint32_t offset, std::string *code,
+                         const std::string &indent) {
     std::string &c = *code;
     std::string off_str = NumToString(offset);
 
     switch (info.ssz_type) {
       case SszType::Bool:
-        c += indent + "if buf[" + off_str + "] > 1 {\n";
-        c += indent + "\treturn ssz.ErrInvalidBool\n";
-        c += indent + "}\n";
-        c += indent + var + " = buf[" + off_str + "] == 1\n";
+        c += indent + "if data[" + off_str + "] > 1'u8:\n";
+        c += indent + "  raise newException(SszError, \"invalid bool\")\n";
+        c += indent + var + " = data[" + off_str + "] == 1'u8\n";
         break;
 
       case SszType::Uint8:
-        c += indent + var + " = buf[" + off_str + "]\n";
+        c += indent + var + " = data[" + off_str + "]\n";
         break;
 
       case SszType::Uint16:
-        c += indent + var + " = binary.LittleEndian.Uint16(buf[" + off_str +
-             ":" + NumToString(offset + 2) + "])\n";
+        c += indent + "littleEndian16(addr " + var +
+             ", unsafeAddr data[" + off_str + "])\n";
         break;
 
       case SszType::Uint32:
-        c += indent + var + " = binary.LittleEndian.Uint32(buf[" + off_str +
-             ":" + NumToString(offset + 4) + "])\n";
+        c += indent + "littleEndian32(addr " + var +
+             ", unsafeAddr data[" + off_str + "])\n";
         break;
 
       case SszType::Uint64:
-        c += indent + var + " = binary.LittleEndian.Uint64(buf[" + off_str +
-             ":" + NumToString(offset + 8) + "])\n";
+        c += indent + "littleEndian64(addr " + var +
+             ", unsafeAddr data[" + off_str + "])\n";
         break;
 
       case SszType::Uint128:
       case SszType::Uint256:
-        c += indent + "copy(" + var + "[:], buf[" + off_str + ":" +
-             NumToString(offset + info.fixed_size) + "])\n";
+        c += indent + "copyMem(addr " + var + "[0], unsafeAddr data[" +
+             off_str + "], " + NumToString(info.fixed_size) + ")\n";
         break;
 
       case SszType::Vector: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          c += indent + "copy(" + var + "[:], buf[" + off_str + ":" +
-               NumToString(offset + info.fixed_size) + "])\n";
+          c += indent + "copyMem(addr " + var + "[0], unsafeAddr data[" +
+               off_str + "], " + NumToString(info.fixed_size) + ")\n";
         } else if (info.elem_info &&
                    info.elem_info->ssz_type == SszType::Container) {
           uint32_t elem_size = info.elem_info->fixed_size;
-          c += indent + "for i := range " + var + " {\n";
-          c += indent + "\tstart := " + off_str + " + i*" +
+          c += indent + "for i in 0 ..< " + NumToString(info.limit) +
+               ":\n";
+          c += indent + "  let start = " + off_str + " + i * " +
                NumToString(elem_size) + "\n";
-          c += indent + "\tif err := " + var +
-               "[i].UnmarshalSSZ(buf[start:start+" + NumToString(elem_size) +
-               "]); err != nil {\n";
-          c += indent + "\t\treturn err\n";
-          c += indent + "\t}\n";
-          c += indent + "}\n";
+          c += indent + "  " + var + "[i] = fromSSZBytes(" +
+               info.elem_info->struct_def->name +
+               ", data.toOpenArray(start, start + " +
+               NumToString(elem_size) + " - 1))\n";
         } else if (info.elem_info) {
           GenUnmarshalPrimitiveArray(info, var, offset, code, indent);
         }
@@ -1148,15 +1178,14 @@ class SszGoGenerator : public BaseGenerator {
       }
 
       case SszType::Bitvector:
-        c += indent + "copy(" + var + "[:], buf[" + off_str + ":" +
-             NumToString(offset + info.fixed_size) + "])\n";
+        c += indent + "copyMem(addr " + var + "[0], unsafeAddr data[" +
+             off_str + "], " + NumToString(info.fixed_size) + ")\n";
         break;
 
       case SszType::Container: {
-        c += indent + "if err := " + var + ".UnmarshalSSZ(buf[" + off_str +
-             ":" + NumToString(offset + info.fixed_size) + "]); err != nil {\n";
-        c += indent + "\treturn err\n";
-        c += indent + "}\n";
+        c += indent + var + " = fromSSZBytes(" +
+             info.struct_def->name + ", data.toOpenArray(" + off_str +
+             ", " + NumToString(offset + info.fixed_size) + " - 1))\n";
         break;
       }
 
@@ -1171,148 +1200,141 @@ class SszGoGenerator : public BaseGenerator {
                                   const std::string &indent) {
     std::string &c = *code;
     uint32_t elem_size = info.elem_info->fixed_size;
-    c += indent + "for i := range " + var + " {\n";
-    c += indent + "\toff := " + NumToString(offset) + " + i*" +
+    c += indent + "for i in 0 ..< " + NumToString(info.limit) + ":\n";
+    c += indent + "  let off = " + NumToString(offset) + " + i * " +
          NumToString(elem_size) + "\n";
     switch (info.elem_info->ssz_type) {
       case SszType::Bool:
-        c += indent + "\tif buf[off] > 1 {\n";
-        c += indent + "\t\treturn ssz.ErrInvalidBool\n";
-        c += indent + "\t}\n";
-        c += indent + "\t" + var + "[i] = buf[off] == 1\n";
+        c += indent + "  if data[off] > 1'u8:\n";
+        c += indent +
+             "    raise newException(SszError, \"invalid bool\")\n";
+        c += indent + "  " + var + "[i] = data[off] == 1'u8\n";
         break;
       case SszType::Uint16:
-        c += indent + "\t" + var +
-             "[i] = binary.LittleEndian.Uint16(buf[off:off+2])\n";
+        c += indent + "  littleEndian16(addr " + var +
+             "[i], unsafeAddr data[off])\n";
         break;
       case SszType::Uint32:
-        c += indent + "\t" + var +
-             "[i] = binary.LittleEndian.Uint32(buf[off:off+4])\n";
+        c += indent + "  littleEndian32(addr " + var +
+             "[i], unsafeAddr data[off])\n";
         break;
       case SszType::Uint64:
-        c += indent + "\t" + var +
-             "[i] = binary.LittleEndian.Uint64(buf[off:off+8])\n";
+        c += indent + "  littleEndian64(addr " + var +
+             "[i], unsafeAddr data[off])\n";
         break;
       default:
         break;
     }
-    c += indent + "}\n";
   }
 
   void GenUnmarshalDynField(const SszFieldInfo &info, const std::string &var,
-                            const FieldDef &field, std::string *code,
+                            const FieldDef & /*field*/, std::string *code,
                             const std::string &indent) {
     std::string &c = *code;
     switch (info.ssz_type) {
       case SszType::ProgressiveList:
       case SszType::List: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
-          // List of byte lists ([][]byte)
-          c += indent + "if len(buf) > 0 {\n";
+          // List of byte lists (seq[seq[byte]])
+          c += indent + "if len(dynData) > 0:\n";
+          c += indent + "  var firstOff: uint32\n";
           c += indent +
-               "\tfirstOff := "
-               "int(binary.LittleEndian.Uint32(buf[0:4]))\n";
-          c += indent + "\tif firstOff%4 != 0 {\n";
-          c += indent + "\t\treturn ssz.ErrInvalidOffset\n";
-          c += indent + "\t}\n";
-          c += indent + "\tcount := firstOff / 4\n";
-          c += indent + "\t" + var + " = make([][]byte, count)\n";
-          c += indent + "\tfor i := 0; i < count; i++ {\n";
+               "  littleEndian32(addr firstOff, unsafeAddr dynData[0])\n";
+          c += indent + "  if int(firstOff) mod 4 != 0:\n";
           c += indent +
-               "\t\tstart := "
-               "int(binary.LittleEndian.Uint32(buf[i*4:i*4+4]))\n";
-          c += indent + "\t\tvar end int\n";
-          c += indent + "\t\tif i+1 < count {\n";
+               "    raise newException(SszError, \"invalid offset\")\n";
+          c += indent + "  let count = int(firstOff) div 4\n";
+          c += indent + "  " + var + " = newSeq[seq[byte]](count)\n";
+          c += indent + "  for i in 0 ..< count:\n";
+          c += indent + "    var startOff: uint32\n";
           c += indent +
-               "\t\t\tend = "
-               "int(binary.LittleEndian.Uint32(buf[(i+1)*4:(i+1)*4+4]))\n";
-          c += indent + "\t\t} else {\n";
-          c += indent + "\t\t\tend = len(buf)\n";
-          c += indent + "\t\t}\n";
+               "    littleEndian32(addr startOff,"
+               " unsafeAddr dynData[i * 4])\n";
+          c += indent + "    var endOff: int\n";
+          c += indent + "    if i + 1 < count:\n";
+          c += indent + "      var nextOff: uint32\n";
           c += indent +
-               "\t\tif start > end || end > len(buf) {\n";
-          c += indent + "\t\t\treturn ssz.ErrInvalidOffset\n";
-          c += indent + "\t\t}\n";
-          c += indent + "\t\t" + var +
-               "[i] = make([]byte, end-start)\n";
-          c += indent + "\t\tcopy(" + var + "[i], buf[start:end])\n";
-          c += indent + "\t}\n";
-          c += indent + "}\n";
-        } else if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          c += indent + var + " = make([]byte, len(buf))\n";
-          c += indent + "copy(" + var + ", buf)\n";
+               "      littleEndian32(addr nextOff,"
+               " unsafeAddr dynData[(i + 1) * 4])\n";
+          c += indent + "      endOff = int(nextOff)\n";
+          c += indent + "    else:\n";
+          c += indent + "      endOff = len(dynData)\n";
+          c += indent +
+               "    if int(startOff) > endOff or"
+               " endOff > len(dynData):\n";
+          c += indent +
+               "      raise newException(SszError, \"invalid offset\")\n";
+          c += indent + "    " + var +
+               "[i] = @(dynData.toOpenArray(int(startOff),"
+               " endOff - 1))\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Uint8) {
+          c += indent + var + " = @(dynData)\n";
         } else if (info.elem_info &&
                    info.elem_info->ssz_type == SszType::Container) {
           if (info.elem_info->is_dynamic) {
             // Dynamic element list
-            c += indent + "if len(buf) > 0 {\n";
+            c += indent + "if len(dynData) > 0:\n";
+            c += indent + "  var firstOff: uint32\n";
             c += indent +
-                 "\tfirstOff := "
-                 "int(binary.LittleEndian.Uint32(buf[0:4]))\n";
-            c += indent + "\tif firstOff%4 != 0 {\n";
-            c += indent + "\t\treturn ssz.ErrInvalidOffset\n";
-            c += indent + "\t}\n";
-            c += indent + "\tcount := firstOff / 4\n";
-            c += indent + "\t" + var + " = make(" + GoTypeName(info, field) +
-                 ", count)\n";
-            c += indent + "\tfor i := 0; i < count; i++ {\n";
+                 "  littleEndian32(addr firstOff,"
+                 " unsafeAddr dynData[0])\n";
+            c += indent + "  if int(firstOff) mod 4 != 0:\n";
             c += indent +
-                 "\t\tstart := "
-                 "int(binary.LittleEndian.Uint32(buf[i*4:i*4+4]))\n";
-            c += indent + "\t\tvar end int\n";
-            c += indent + "\t\tif i+1 < count {\n";
+                 "    raise newException(SszError, \"invalid offset\")\n";
+            c += indent + "  let count = int(firstOff) div 4\n";
+            c += indent + "  " + var + " = newSeq[" +
+                 NimElemTypeName(*info.elem_info) + "](count)\n";
+            c += indent + "  for i in 0 ..< count:\n";
+            c += indent + "    var startOff: uint32\n";
             c += indent +
-                 "\t\t\tend = "
-                 "int(binary.LittleEndian.Uint32(buf[(i+1)*4:(i+1)*4+4]))\n";
-            c += indent + "\t\t} else {\n";
-            c += indent + "\t\t\tend = len(buf)\n";
-            c += indent + "\t\t}\n";
+                 "    littleEndian32(addr startOff,"
+                 " unsafeAddr dynData[i * 4])\n";
+            c += indent + "    var endOff: int\n";
+            c += indent + "    if i + 1 < count:\n";
+            c += indent + "      var nextOff: uint32\n";
             c += indent +
-                 "\t\tif start > end || end > len(buf) {\n";
-            c += indent + "\t\t\treturn ssz.ErrInvalidOffset\n";
-            c += indent + "\t\t}\n";
-            c += indent + "\t\t" + var +
-                 "[i] = new(" + info.elem_info->struct_def->name + ")\n";
-            c += indent + "\t\tif err := " + var +
-                 "[i].UnmarshalSSZ(buf[start:end]); err != nil {\n";
-            c += indent + "\t\t\treturn err\n";
-            c += indent + "\t\t}\n";
-            c += indent + "\t}\n";
-            c += indent + "}\n";
+                 "      littleEndian32(addr nextOff,"
+                 " unsafeAddr dynData[(i + 1) * 4])\n";
+            c += indent + "      endOff = int(nextOff)\n";
+            c += indent + "    else:\n";
+            c += indent + "      endOff = len(dynData)\n";
+            c += indent +
+                 "    if int(startOff) > endOff or"
+                 " endOff > len(dynData):\n";
+            c += indent +
+                 "      raise newException(SszError,"
+                 " \"invalid offset\")\n";
+            c += indent + "    " + var + "[i] = fromSSZBytes(" +
+                 info.elem_info->struct_def->name +
+                 ", dynData.toOpenArray(int(startOff), endOff - 1))\n";
           } else {
             uint32_t elem_size = info.elem_info->fixed_size;
-            c += indent + "count := len(buf) / " + NumToString(elem_size) +
-                 "\n";
-            c += indent + var + " = make(" + GoTypeName(info, field) +
-                 ", count)\n";
-            c += indent + "for i := 0; i < count; i++ {\n";
-            c += indent + "\t" + var + "[i] = new(" +
-                 info.elem_info->struct_def->name + ")\n";
-            c += indent + "\toff := i * " + NumToString(elem_size) + "\n";
-            c += indent + "\tif err := " + var +
-                 "[i].UnmarshalSSZ(buf[off:off+" + NumToString(elem_size) +
-                 "]); err != nil {\n";
-            c += indent + "\t\treturn err\n";
-            c += indent + "\t}\n";
-            c += indent + "}\n";
+            c += indent + "let count = len(dynData) div " +
+                 NumToString(elem_size) + "\n";
+            c += indent + var + " = newSeq[" +
+                 NimElemTypeName(*info.elem_info) + "](count)\n";
+            c += indent + "for i in 0 ..< count:\n";
+            c += indent + "  let off = i * " +
+                 NumToString(elem_size) + "\n";
+            c += indent + "  " + var + "[i] = fromSSZBytes(" +
+                 info.elem_info->struct_def->name +
+                 ", dynData.toOpenArray(off, off + " +
+                 NumToString(elem_size) + " - 1))\n";
           }
         } else if (info.elem_info) {
-          GenUnmarshalPrimitiveSlice(info, var, field, code, indent);
+          GenUnmarshalPrimitiveSlice(info, var, code, indent);
         } else {
-          c += indent + var + " = make([]byte, len(buf))\n";
-          c += indent + "copy(" + var + ", buf)\n";
+          c += indent + var + " = @(dynData)\n";
         }
         break;
       }
       case SszType::Bitlist:
-        c += indent + var + " = make([]byte, len(buf))\n";
-        c += indent + "copy(" + var + ", buf)\n";
+        c += indent + var + " = @(dynData)\n";
         break;
       case SszType::Container:
-        c += indent + "if err := " + var +
-             ".UnmarshalSSZ(buf); err != nil {\n";
-        c += indent + "\treturn err\n";
-        c += indent + "}\n";
+        c += indent + var + " = fromSSZBytes(" +
+             info.struct_def->name + ", dynData)\n";
         break;
       default:
         break;
@@ -1321,58 +1343,62 @@ class SszGoGenerator : public BaseGenerator {
 
   void GenUnmarshalPrimitiveSlice(const SszFieldInfo &info,
                                   const std::string &var,
-                                  const FieldDef &field, std::string *code,
+                                  std::string *code,
                                   const std::string &indent) {
     std::string &c = *code;
     uint32_t elem_size = info.elem_info->fixed_size;
-    c += indent + "count := len(buf) / " + NumToString(elem_size) + "\n";
-    c += indent + var + " = make(" + GoTypeName(info, field) + ", count)\n";
-    c += indent + "for i := 0; i < count; i++ {\n";
-    c += indent + "\toff := i * " + NumToString(elem_size) + "\n";
+    c += indent + "let count = len(dynData) div " +
+         NumToString(elem_size) + "\n";
+
+    std::string nim_elem_type;
+    switch (info.elem_info->ssz_type) {
+      case SszType::Bool: nim_elem_type = "bool"; break;
+      case SszType::Uint16: nim_elem_type = "uint16"; break;
+      case SszType::Uint32: nim_elem_type = "uint32"; break;
+      case SszType::Uint64: nim_elem_type = "uint64"; break;
+      default: nim_elem_type = "uint8"; break;
+    }
+
+    c += indent + var + " = newSeq[" + nim_elem_type + "](count)\n";
+    c += indent + "for i in 0 ..< count:\n";
+    c += indent + "  let off = i * " + NumToString(elem_size) + "\n";
     switch (info.elem_info->ssz_type) {
       case SszType::Bool:
-        c += indent + "\tif buf[off] > 1 {\n";
-        c += indent + "\t\treturn ssz.ErrInvalidBool\n";
-        c += indent + "\t}\n";
-        c += indent + "\t" + var + "[i] = buf[off] == 1\n";
+        c += indent + "  if dynData[off] > 1'u8:\n";
+        c += indent +
+             "    raise newException(SszError, \"invalid bool\")\n";
+        c += indent + "  " + var + "[i] = dynData[off] == 1'u8\n";
         break;
       case SszType::Uint16:
-        c += indent + "\t" + var +
-             "[i] = binary.LittleEndian.Uint16(buf[off:off+2])\n";
+        c += indent + "  littleEndian16(addr " + var +
+             "[i], unsafeAddr dynData[off])\n";
         break;
       case SszType::Uint32:
-        c += indent + "\t" + var +
-             "[i] = binary.LittleEndian.Uint32(buf[off:off+4])\n";
+        c += indent + "  littleEndian32(addr " + var +
+             "[i], unsafeAddr dynData[off])\n";
         break;
       case SszType::Uint64:
-        c += indent + "\t" + var +
-             "[i] = binary.LittleEndian.Uint64(buf[off:off+8])\n";
+        c += indent + "  littleEndian64(addr " + var +
+             "[i], unsafeAddr dynData[off])\n";
         break;
       default:
         break;
     }
-    c += indent + "}\n";
   }
 
   // -----------------------------------------------------------------------
-  // HashTreeRoot generation
+  // hashTreeRoot generation
   // -----------------------------------------------------------------------
 
   void GenHashTreeRoot(const StructDef &struct_def, std::string *code) {
     std::string &c = *code;
     std::string type_name = struct_def.name;
-    c += "func (t *" + type_name +
-         ") HashTreeRoot() (root [32]byte, err error) {\n";
-    c += "\terr = hasher.WithDefaultHasher(func(hh sszutils.HashWalker) "
-         "(err error) {\n";
-    c += "\t\tif err = t.HashTreeRootWith(hh); err != nil {\n";
-    c += "\t\t\treturn\n";
-    c += "\t\t}\n";
-    c += "\t\troot, err = hh.HashRoot()\n";
-    c += "\t\treturn\n";
-    c += "\t})\n";
-    c += "\treturn\n";
-    c += "}\n";
+    c += "proc hashTreeRoot*(t: " + type_name +
+         "): array[32, byte] =\n";
+    c += "  var h = HasherPool.get()\n";
+    c += "  defer: HasherPool.put(h)\n";
+    c += "  hashTreeRootWith(t, h)\n";
+    c += "  result = h.hashRoot()\n";
   }
 
   void GenHashTreeRootWith(const StructDef &struct_def,
@@ -1381,15 +1407,14 @@ class SszGoGenerator : public BaseGenerator {
     std::string &c = *code;
     std::string type_name = struct_def.name;
 
-    c += "func (t *" + type_name +
-         ") HashTreeRootWith(hh sszutils.HashWalker) error {\n";
-    c += "\tidx := hh.Index()\n";
+    c += "proc hashTreeRootWith*(t: " + type_name +
+         ", h: var Hasher) =\n";
+    c += "  let idx = h.index()\n";
     c += "\n";
 
     if (container.is_progressive) {
       // EIP-7495: emit leaves for indices 0..max_ssz_index,
       // filling gaps with zero-hash for inactive fields.
-      // Build a map from ssz_index → field for quick lookup.
       std::map<uint32_t, const FieldDef *> index_to_field;
       for (auto &kv : container.field_ssz_indices) {
         index_to_field[kv.second] = kv.first;
@@ -1401,210 +1426,189 @@ class SszGoGenerator : public BaseGenerator {
           auto *field = fit->second;
           auto iit = container.field_infos.find(field);
           if (iit == container.field_infos.end()) continue;
-          c += "\t// Index " + NumToString(i) + ": " + field->name + "\n";
-          GenHashField(iit->second, "t." + namer_.Field(*field), *field, &c,
-                       "\t");
+          c += "  # Index " + NumToString(i) + ": " + field->name + "\n";
+          GenHashField(iit->second, "t." + NimFieldName(*field),
+                       &c, "  ");
         } else {
-          c += "\t// Index " + NumToString(i) + ": gap (inactive)\n";
-          c += "\thh.PutUint8(0)\n";
+          c += "  # Index " + NumToString(i) + ": gap (inactive)\n";
+          c += "  h.putUint8(0'u8)\n";
         }
       }
       c += "\n";
 
       // Emit active_fields bitvector literal
-      c += "\thh.MerkleizeProgressiveWithActiveFields(idx, []byte{";
-      for (size_t i = 0; i < container.active_fields_bitvector.size(); i++) {
+      c += "  h.merkleizeProgressiveWithActiveFields(idx, @[";
+      for (size_t i = 0; i < container.active_fields_bitvector.size();
+           i++) {
         if (i > 0) c += ", ";
         char hex[8];
-        snprintf(hex, sizeof(hex), "0x%02x",
+        snprintf(hex, sizeof(hex), "0x%02x'u8",
                  container.active_fields_bitvector[i]);
         c += hex;
       }
-      c += "})\n";
+      c += "])\n";
     } else {
       for (auto *field : container.all_fields) {
         auto it = container.field_infos.find(field);
         if (it == container.field_infos.end()) continue;
         auto &info = it->second;
-        std::string fname = "t." + namer_.Field(*field);
+        std::string fname = "t." + NimFieldName(*field);
 
-        c += "\t// Field '" + field->name + "'\n";
-        GenHashField(info, fname, *field, &c, "\t");
+        c += "  # Field '" + field->name + "'\n";
+        GenHashField(info, fname, &c, "  ");
         c += "\n";
       }
 
-      c += "\thh.Merkleize(idx)\n";
+      c += "  h.merkleize(idx)\n";
     }
-
-    c += "\treturn nil\n";
-    c += "}\n";
   }
 
   void GenHashField(const SszFieldInfo &info, const std::string &var,
-                    const FieldDef & /*field*/, std::string *code,
-                    const std::string &indent) {
+                    std::string *code, const std::string &indent) {
     std::string &c = *code;
 
     switch (info.ssz_type) {
       case SszType::Bool:
-        c += indent + "hh.PutBool(" + var + ")\n";
+        c += indent + "h.putBool(" + var + ")\n";
         break;
 
       case SszType::Uint8:
-        c += indent + "hh.PutUint8(" + var + ")\n";
+        c += indent + "h.putUint8(" + var + ")\n";
         break;
 
       case SszType::Uint16:
-        c += indent + "hh.PutUint16(" + var + ")\n";
+        c += indent + "h.putUint16(" + var + ")\n";
         break;
 
       case SszType::Uint32:
-        c += indent + "hh.PutUint32(" + var + ")\n";
+        c += indent + "h.putUint32(" + var + ")\n";
         break;
 
       case SszType::Uint64:
-        c += indent + "hh.PutUint64(" + var + ")\n";
+        c += indent + "h.putUint64(" + var + ")\n";
         break;
 
       case SszType::Uint128:
       case SszType::Uint256:
-        c += indent + "hh.PutBytes(" + var + "[:])\n";
+        c += indent + "h.putBytes(" + var + ")\n";
         break;
 
       case SszType::Vector: {
-        if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          c += indent + "hh.PutBytes(" + var + "[:])\n";
+        if (info.elem_info &&
+            info.elem_info->ssz_type == SszType::Uint8) {
+          c += indent + "h.putBytes(" + var + ")\n";
         } else if (info.elem_info &&
                    info.elem_info->ssz_type == SszType::Container) {
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          c += indent + "\tfor i := range " + var + " {\n";
-          c += indent + "\t\tif err := " + var +
-               "[i].HashTreeRootWith(hh); err != nil {\n";
-          c += indent + "\t\t\treturn err\n";
-          c += indent + "\t\t}\n";
-          c += indent + "\t}\n";
-          c += indent + "\thh.Merkleize(subIdx)\n";
-          c += indent + "}\n";
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          c += indent + "  for i in 0 ..< len(" + var + "):\n";
+          c += indent + "    hashTreeRootWith(" + var + "[i], h)\n";
+          c += indent + "  h.merkleize(subIdx)\n";
         } else if (info.elem_info) {
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          GenHashPrimitiveArray(info, var, code, indent + "\t");
-          c += indent + "\thh.FillUpTo32()\n";
-          c += indent + "\thh.Merkleize(subIdx)\n";
-          c += indent + "}\n";
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          GenHashPrimitiveArray(info, var, code, indent + "  ");
+          c += indent + "  h.fillUpTo32()\n";
+          c += indent + "  h.merkleize(subIdx)\n";
         }
         break;
       }
 
       case SszType::List: {
         uint64_t limit = info.limit;
-        if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
-          // List of byte lists ([][]byte): hash each inner list, then merkleize
+        if (info.elem_info &&
+            info.elem_info->ssz_type == SszType::List) {
+          // List of byte lists: hash each inner list, then merkleize
           uint64_t inner_limit = info.elem_info->limit;
           uint64_t inner_chunk_limit =
               inner_limit > 0 ? ssz_limit_for_bytes(inner_limit) : 0;
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          c += indent + "\tfor _, item := range " + var + " {\n";
-          c += indent + "\t\tinner := hh.Index()\n";
-          c += indent + "\t\thh.AppendBytes32(item)\n";
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          c += indent + "  for item in " + var + ":\n";
+          c += indent + "    let inner = h.index()\n";
+          c += indent + "    h.appendBytes32(item)\n";
           if (inner_chunk_limit > 0) {
-            c += indent + "\t\thh.MerkleizeWithMixin(inner, uint64(len(item)), " +
-                 NumToString(inner_chunk_limit) + ")\n";
+            c += indent +
+                 "    h.merkleizeWithMixin(inner, uint64(len(item)), " +
+                 NumToString(inner_chunk_limit) + "'u64)\n";
           } else {
-            c += indent + "\t\thh.Merkleize(inner)\n";
+            c += indent + "    h.merkleize(inner)\n";
           }
-          c += indent + "\t}\n";
-          c += indent + "\thh.MerkleizeWithMixin(subIdx, uint64(len(" + var +
-               ")), " + NumToString(limit) + ")\n";
-          c += indent + "}\n";
-        } else if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          c += indent + "\thh.AppendBytes32(" + var + ")\n";
-          c += indent + "\thh.MerkleizeWithMixin(subIdx, uint64(len(" + var +
-               ")), " + NumToString(ssz_limit_for_bytes(limit)) + ")\n";
-          c += indent + "}\n";
+          c += indent + "  h.merkleizeWithMixin(subIdx, uint64(len(" +
+               var + ")), " + NumToString(limit) + "'u64)\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Uint8) {
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          c += indent + "  h.appendBytes32(" + var + ")\n";
+          c += indent + "  h.merkleizeWithMixin(subIdx, uint64(len(" +
+               var + ")), " +
+               NumToString(ssz_limit_for_bytes(limit)) + "'u64)\n";
         } else if (info.elem_info &&
                    info.elem_info->ssz_type == SszType::Container) {
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          c += indent + "\tfor _, item := range " + var + " {\n";
-          c += indent + "\t\tif err := item.HashTreeRootWith(hh); err != nil "
-                        "{\n";
-          c += indent + "\t\t\treturn err\n";
-          c += indent + "\t\t}\n";
-          c += indent + "\t}\n";
-          c += indent + "\thh.MerkleizeWithMixin(subIdx, uint64(len(" + var +
-               ")), " + NumToString(limit) + ")\n";
-          c += indent + "}\n";
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          c += indent + "  for item in " + var + ":\n";
+          c += indent + "    hashTreeRootWith(item, h)\n";
+          c += indent + "  h.merkleizeWithMixin(subIdx, uint64(len(" +
+               var + ")), " + NumToString(limit) + "'u64)\n";
         } else if (info.elem_info) {
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          GenHashPrimitiveSlice(info, var, code, indent + "\t");
-          c += indent + "\thh.FillUpTo32()\n";
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          GenHashPrimitiveSlice(info, var, code, indent + "  ");
+          c += indent + "  h.fillUpTo32()\n";
           uint64_t hash_limit =
               ssz_limit_for_elements(limit, info.elem_info->fixed_size);
-          c += indent + "\thh.MerkleizeWithMixin(subIdx, uint64(len(" + var +
-               ")), " + NumToString(hash_limit) + ")\n";
-          c += indent + "}\n";
+          c += indent + "  h.merkleizeWithMixin(subIdx, uint64(len(" +
+               var + ")), " + NumToString(hash_limit) + "'u64)\n";
         }
         break;
       }
 
       case SszType::Bitlist:
-        c += indent + "hh.PutBitlist(" + var + ", " +
-             NumToString(info.limit) + ")\n";
+        c += indent + "h.putBitlist(" + var + ", " +
+             NumToString(info.limit) + "'u64)\n";
         break;
 
       case SszType::Bitvector:
-        c += indent + "hh.PutBytes(" + var + "[:])\n";
+        c += indent + "h.putBytes(" + var + ")\n";
         break;
 
       case SszType::Container:
-        c += indent + "if err := " + var +
-             ".HashTreeRootWith(hh); err != nil {\n";
-        c += indent + "\treturn err\n";
-        c += indent + "}\n";
+        c += indent + "hashTreeRootWith(" + var + ", h)\n";
         break;
 
       case SszType::ProgressiveContainer:
-        c += indent + "if err := " + var +
-             ".HashTreeRootWith(hh); err != nil {\n";
-        c += indent + "\treturn err\n";
-        c += indent + "}\n";
+        c += indent + "hashTreeRootWith(" + var + ", h)\n";
         break;
 
       case SszType::ProgressiveList: {
-        // EIP-7916: use MerkleizeProgressiveWithMixin instead of MerkleizeWithMixin
-        if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          c += indent + "\thh.AppendBytes32(" + var + ")\n";
-          c += indent + "\thh.MerkleizeProgressiveWithMixin(subIdx, uint64(len(" +
+        // EIP-7916: use merkleizeProgressiveWithMixin
+        if (info.elem_info &&
+            info.elem_info->ssz_type == SszType::Uint8) {
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          c += indent + "  h.appendBytes32(" + var + ")\n";
+          c += indent +
+               "  h.merkleizeProgressiveWithMixin(subIdx, uint64(len(" +
                var + ")))\n";
-          c += indent + "}\n";
         } else if (info.elem_info &&
                    info.elem_info->ssz_type == SszType::Container) {
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          c += indent + "\tfor _, item := range " + var + " {\n";
-          c += indent + "\t\tif err := item.HashTreeRootWith(hh); err != nil {\n";
-          c += indent + "\t\t\treturn err\n";
-          c += indent + "\t\t}\n";
-          c += indent + "\t}\n";
-          c += indent + "\thh.MerkleizeProgressiveWithMixin(subIdx, uint64(len(" +
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          c += indent + "  for item in " + var + ":\n";
+          c += indent + "    hashTreeRootWith(item, h)\n";
+          c += indent +
+               "  h.merkleizeProgressiveWithMixin(subIdx, uint64(len(" +
                var + ")))\n";
-          c += indent + "}\n";
         } else if (info.elem_info) {
-          c += indent + "{\n";
-          c += indent + "\tsubIdx := hh.Index()\n";
-          GenHashPrimitiveSlice(info, var, code, indent + "\t");
-          c += indent + "\thh.FillUpTo32()\n";
-          c += indent + "\thh.MerkleizeProgressiveWithMixin(subIdx, uint64(len(" +
+          c += indent + "block:\n";
+          c += indent + "  let subIdx = h.index()\n";
+          GenHashPrimitiveSlice(info, var, code, indent + "  ");
+          c += indent + "  h.fillUpTo32()\n";
+          c += indent +
+               "  h.merkleizeProgressiveWithMixin(subIdx, uint64(len(" +
                var + ")))\n";
-          c += indent + "}\n";
         }
         break;
       }
@@ -1614,44 +1618,47 @@ class SszGoGenerator : public BaseGenerator {
     }
   }
 
-  void GenHashPrimitiveArray(const SszFieldInfo &info, const std::string &var,
-                             std::string *code, const std::string &indent) {
+  void GenHashPrimitiveArray(const SszFieldInfo &info,
+                             const std::string &var,
+                             std::string *code,
+                             const std::string &indent) {
     std::string &c = *code;
-    c += indent + "for i := range " + var + " {\n";
+    c += indent + "for i in 0 ..< len(" + var + "):\n";
     std::string elem_var = var + "[i]";
-    GenHashPrimitive(info.elem_info->ssz_type, elem_var, code, indent + "\t",
-                     true);
-    c += indent + "}\n";
+    GenHashPrimitive(info.elem_info->ssz_type, elem_var, code,
+                     indent + "  ", true);
   }
 
-  void GenHashPrimitiveSlice(const SszFieldInfo &info, const std::string &var,
-                             std::string *code, const std::string &indent) {
+  void GenHashPrimitiveSlice(const SszFieldInfo &info,
+                             const std::string &var,
+                             std::string *code,
+                             const std::string &indent) {
     std::string &c = *code;
-    c += indent + "for _, v := range " + var + " {\n";
-    GenHashPrimitive(info.elem_info->ssz_type, "v", code, indent + "\t", true);
-    c += indent + "}\n";
+    c += indent + "for v in " + var + ":\n";
+    GenHashPrimitive(info.elem_info->ssz_type, "v", code,
+                     indent + "  ", true);
   }
 
   void GenHashPrimitive(SszType ssz_type, const std::string &var,
                         std::string *code, const std::string &indent,
                         bool append) {
     std::string &c = *code;
-    std::string method = append ? "Append" : "Put";
+    std::string method = append ? "append" : "put";
     switch (ssz_type) {
       case SszType::Bool:
-        c += indent + "hh." + method + "Bool(" + var + ")\n";
+        c += indent + "h." + method + "Bool(" + var + ")\n";
         break;
       case SszType::Uint8:
-        c += indent + "hh." + method + "Uint8(" + var + ")\n";
+        c += indent + "h." + method + "Uint8(" + var + ")\n";
         break;
       case SszType::Uint16:
-        c += indent + "hh." + method + "Uint16(" + var + ")\n";
+        c += indent + "h." + method + "Uint16(" + var + ")\n";
         break;
       case SszType::Uint32:
-        c += indent + "hh." + method + "Uint32(" + var + ")\n";
+        c += indent + "h." + method + "Uint32(" + var + ")\n";
         break;
       case SszType::Uint64:
-        c += indent + "hh." + method + "Uint64(" + var + ")\n";
+        c += indent + "h." + method + "Uint64(" + var + ")\n";
         break;
       default:
         break;
@@ -1675,92 +1682,83 @@ class SszGoGenerator : public BaseGenerator {
   // File saving
   // -----------------------------------------------------------------------
 
-  bool SaveType(const StructDef &def, const std::string &classcode) {
+  bool SaveFile(const Namespace *ns, const std::string &classcode) {
     if (classcode.empty()) return true;
 
-    Namespace &ns = *def.defined_namespace;
-    std::string pkg_name =
-        ns.components.empty() ? ToSnakeCase(def.name) : LastNamespacePart(ns);
-
     std::string code;
-    code += "// Code generated by the FlatBuffers compiler. DO NOT EDIT.\n\n";
-    code += "package " + pkg_name + "\n\n";
-    code += "import (\n";
-    code += "\t\"encoding/binary\"\n";
-    code += "\n";
-    code += "\tssz \"github.com/google/flatbuffers/go/ssz\"\n";
-    code += "\t\"github.com/pk910/dynamic-ssz/hasher\"\n";
-    code += "\t\"github.com/pk910/dynamic-ssz/sszutils\"\n";
-    code += ")\n\n";
-
-    // Suppress unused import warnings
-    code += "var _ = binary.LittleEndian\n";
-    code += "var _ = hasher.FastHasherPool\n\n";
+    code +=
+        "# Code generated by the FlatBuffers compiler."
+        " DO NOT EDIT.\n\n";
+    code += "import std/endians\n";
+    code += "import ssz_runtime\n\n";
 
     code += classcode;
 
     // Strip trailing double newlines
-    while (code.length() > 2 && code.substr(code.length() - 2) == "\n\n") {
+    while (code.length() > 2 &&
+           code.substr(code.length() - 2) == "\n\n") {
       code.pop_back();
     }
 
-    std::string directory = namer_.Directories(ns);
-    std::string snake_name = ToSnakeCase(def.name);
+    std::string directory;
+    if (ns) {
+      directory = namer_.Directories(*ns);
+    }
+    if (directory.empty()) {
+      directory = path_;
+    }
     EnsureDirExists(directory);
-    std::string filename = directory + snake_name + "_ssz.go";
-    return parser_.opts.file_saver->SaveFile(filename.c_str(), code, false);
+
+    // Use the schema file name as the output file name
+    std::string snake_name = ToSnakeCase(file_name_);
+    std::string filename = directory + snake_name + "_ssz.nim";
+    return parser_.opts.file_saver->SaveFile(
+        filename.c_str(), code, false);
   }
 };
 
-}  // namespace ssz_go
+}  // namespace ssz_nim
 
 // ---------------------------------------------------------------------------
 // Code generator wrapper
 // ---------------------------------------------------------------------------
 
-static bool GenerateSszGo(const Parser &parser, const std::string &path,
-                          const std::string &file_name) {
-  ssz_go::SszGoGenerator generator(parser, path, file_name);
+static bool GenerateSszNim(const Parser &parser, const std::string &path,
+                           const std::string &file_name) {
+  ssz_nim::SszNimGenerator generator(parser, path, file_name);
   return generator.generate();
 }
 
 namespace {
 
-class SszGoCodeGenerator : public CodeGenerator {
+class SszNimCodeGenerator : public CodeGenerator {
  public:
   Status GenerateCode(const Parser &parser, const std::string &path,
                       const std::string &filename) override {
-    if (!GenerateSszGo(parser, path, filename)) { return Status::ERROR; }
+    if (!GenerateSszNim(parser, path, filename)) { return Status::ERROR; }
     return Status::OK;
   }
 
-  Status GenerateCode(const uint8_t *, int64_t,
-                      const CodeGenOptions &) override {
+  Status GenerateCode(const uint8_t * /*buffer*/, int64_t /*length*/,
+                      const CodeGenOptions & /*options*/) override {
     return Status::NOT_IMPLEMENTED;
   }
 
-  Status GenerateMakeRule(const Parser &parser, const std::string &path,
-                          const std::string &filename,
-                          std::string &output) override {
-    (void)parser;
-    (void)path;
-    (void)filename;
-    (void)output;
+  Status GenerateMakeRule(const Parser & /*parser*/,
+                          const std::string & /*path*/,
+                          const std::string & /*filename*/,
+                          std::string & /*output*/) override {
     return Status::NOT_IMPLEMENTED;
   }
 
-  Status GenerateGrpcCode(const Parser &parser, const std::string &path,
-                          const std::string &filename) override {
-    (void)parser;
-    (void)path;
-    (void)filename;
+  Status GenerateGrpcCode(const Parser & /*parser*/,
+                          const std::string & /*path*/,
+                          const std::string & /*filename*/) override {
     return Status::NOT_IMPLEMENTED;
   }
 
-  Status GenerateRootFile(const Parser &parser,
-                          const std::string &path) override {
-    (void)parser;
-    (void)path;
+  Status GenerateRootFile(const Parser & /*parser*/,
+                          const std::string & /*path*/) override {
     return Status::NOT_IMPLEMENTED;
   }
 
@@ -1770,15 +1768,18 @@ class SszGoCodeGenerator : public CodeGenerator {
 
   bool SupportsRootFileGeneration() const override { return false; }
 
-  IDLOptions::Language Language() const override { return IDLOptions::kSszGo; }
+  IDLOptions::Language Language() const override {
+    return IDLOptions::kSszNim;
+  }
 
-  std::string LanguageName() const override { return "SszGo"; }
+  std::string LanguageName() const override { return "SszNim"; }
 };
 
 }  // namespace
 
-std::unique_ptr<CodeGenerator> NewSszGoCodeGenerator() {
-  return std::unique_ptr<SszGoCodeGenerator>(new SszGoCodeGenerator());
+std::unique_ptr<CodeGenerator> NewSszNimCodeGenerator() {
+  return std::unique_ptr<SszNimCodeGenerator>(
+      new SszNimCodeGenerator());
 }
 
 }  // namespace flatbuffers

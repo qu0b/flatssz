@@ -769,6 +769,11 @@ struct IDLOptions {
     kKotlinKmp = 1 << 19,
     kSszGo = 1 << 20,
     kSszRust = 1 << 21,
+    kSszTs = 1 << 22,
+    kSszZig = 1 << 23,
+    kSszJava = 1 << 24,
+    kSszCSharp = 1 << 25,
+    kSszNim = 1 << 26,
     kMAX
   };
 

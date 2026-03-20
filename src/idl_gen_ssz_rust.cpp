@@ -1451,7 +1451,6 @@ class SszRustGenerator : public BaseGenerator {
   // --- Fixed container accessors ---
   void GenViewFixedAccessors(const SszContainerInfo &container,
                              std::string *code) {
-    std::string &c = *code;
     uint32_t offset = 0;
     for (auto *field : container.all_fields) {
       auto it = container.field_infos.find(field);
