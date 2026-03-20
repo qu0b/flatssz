@@ -1,4 +1,4 @@
-import std/[times, os, json, strutils, monotimes]
+import std/[times, json, strutils, monotimes]
 import ssz_runtime
 import deneb_ssz
 

@@ -1,6 +1,6 @@
 const std = @import("std");
-const ssz = @import("ssz_runtime");
-const deneb = @import("deneb_ssz");
+const ssz = @import("ssz_runtime.zig");
+const deneb = @import("deneb_ssz.zig");
 
 const SignedBeaconBlock = deneb.SignedBeaconBlock;
 
