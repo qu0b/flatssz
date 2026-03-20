@@ -108,13 +108,13 @@ Each field keeps a stable generalized index across all forks. Serialization is u
 
 Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots.
 
-| Operation | Rust | Nim | Go | Java | C# | TypeScript |
-|---|---|---|---|---|---|---|
-| **Unmarshal** | **12 us** | 18 us | 32 us | 80 us | 61 us | 497 us |
-| **Marshal** | **3.6 us** | 98 us | 16 us | 18 us | 83 us | 82 us |
-| **HashTreeRoot** | **399 us** | 4,150 us | 455 us | 804 us | 6,741 us | 23,913 us |
+| Operation | Rust | Zig | Nim | Go | Java | C# | TypeScript |
+|---|---|---|---|---|---|---|---|
+| **Unmarshal** | **12 us** | **48 ns**\* | 18 us | 32 us | 80 us | 61 us | 497 us |
+| **Marshal** | **3.6 us** | 198 us | 98 us | 16 us | 18 us | 83 us | 82 us |
+| **HashTreeRoot** | **399 us** | 1,662 us | 4,150 us | 455 us | 804 us | 6,741 us | 23,913 us |
 
-Rust zero-copy view: unmarshal in **1.2 ns** (validated wrap, no copy). Go and Rust HTR use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). All others use standard SHA-256 implementations. All results verified against known hash tree roots.
+\* Zig unmarshal is zero-copy (slices reference input buffer). Rust zero-copy view: **1.2 ns**. Go and Rust HTR use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). All results verified against known hash tree roots.
 
 | Progressive | Go | Rust |
 |---|---|---|

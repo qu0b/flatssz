@@ -1438,34 +1438,28 @@ pub const BeaconBlockBody = struct {
     randao_reveal: Bytes96,
     eth1_data: ETH1Data,
     graffiti: Bytes32,
-    proposer_slashings: []ProposerSlashing,
-    attester_slashings: []AttesterSlashing,
-    attestations: []Attestation,
-    deposits: []Deposit,
-    voluntary_exits: []SignedVoluntaryExit,
+    proposer_slashings_bytes: []const u8,
+    attester_slashings_bytes: []const u8,
+    attestations_bytes: []const u8,
+    deposits_bytes: []const u8,
+    voluntary_exits_bytes: []const u8,
     sync_aggregate: SyncAggregate,
     execution_payload: ExecutionPayload,
-    bls_to_execution_changes: []SignedBLSToExecutionChange,
-    blob_kzg_commitments: []KZGCommitment,
+    bls_to_execution_changes_bytes: []const u8,
+    blob_kzg_commitments_bytes: []const u8,
 
     const Self = @This();
 
     pub fn sszBytesLen(self: *const Self) usize {
         var size: usize = 392;
-        size += self.proposer_slashings.len * 416;
-        size += self.attester_slashings.len * 4;
-        for (self.attester_slashings) |*item| {
-            size += item.sszBytesLen();
-        }
-        size += self.attestations.len * 4;
-        for (self.attestations) |*item| {
-            size += item.sszBytesLen();
-        }
-        size += self.deposits.len * 1240;
-        size += self.voluntary_exits.len * 112;
+        size += self.proposer_slashings_bytes.len;
+        size += self.attester_slashings_bytes.len;
+        size += self.attestations_bytes.len;
+        size += self.deposits_bytes.len;
+        size += self.voluntary_exits_bytes.len;
         size += self.execution_payload.sszBytesLen();
-        size += self.bls_to_execution_changes.len * 172;
-        size += self.blob_kzg_commitments.len * 48;
+        size += self.bls_to_execution_changes_bytes.len;
+        size += self.blob_kzg_commitments_bytes.len;
         return size;
     }
 
@@ -1476,66 +1470,32 @@ pub const BeaconBlockBody = struct {
         try self.eth1_data.sszAppend(writer);
         try self.graffiti.sszAppend(writer);
         try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, offset)));
-        offset += @intCast(self.proposer_slashings.len * 416);
+        offset += @intCast(self.proposer_slashings_bytes.len);
         try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, offset)));
-        offset += @intCast(self.attester_slashings.len * 4);
-        for (self.attester_slashings) |*item| {
-            offset += @intCast(item.sszBytesLen());
-        }
+        offset += @intCast(self.attester_slashings_bytes.len);
         try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, offset)));
-        offset += @intCast(self.attestations.len * 4);
-        for (self.attestations) |*item| {
-            offset += @intCast(item.sszBytesLen());
-        }
+        offset += @intCast(self.attestations_bytes.len);
         try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, offset)));
-        offset += @intCast(self.deposits.len * 1240);
+        offset += @intCast(self.deposits_bytes.len);
         try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, offset)));
-        offset += @intCast(self.voluntary_exits.len * 112);
+        offset += @intCast(self.voluntary_exits_bytes.len);
         try self.sync_aggregate.sszAppend(writer);
         try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, offset)));
         offset += @intCast(self.execution_payload.sszBytesLen());
         try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, offset)));
-        offset += @intCast(self.bls_to_execution_changes.len * 172);
+        offset += @intCast(self.bls_to_execution_changes_bytes.len);
         try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, offset)));
-        offset += @intCast(self.blob_kzg_commitments.len * 48);
+        offset += @intCast(self.blob_kzg_commitments_bytes.len);
 
         // Dynamic section
-        for (self.proposer_slashings) |*item| {
-            try item.sszAppend(writer);
-        }
-        {
-            var inner_offset: u32 = @intCast(self.attester_slashings.len * 4);
-            for (self.attester_slashings) |*item| {
-                try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, inner_offset)));
-                inner_offset += @intCast(item.sszBytesLen());
-            }
-            for (self.attester_slashings) |*item| {
-                try item.sszAppend(writer);
-            }
-        }
-        {
-            var inner_offset: u32 = @intCast(self.attestations.len * 4);
-            for (self.attestations) |*item| {
-                try writer.writeAll(std.mem.asBytes(&std.mem.nativeToLittle(u32, inner_offset)));
-                inner_offset += @intCast(item.sszBytesLen());
-            }
-            for (self.attestations) |*item| {
-                try item.sszAppend(writer);
-            }
-        }
-        for (self.deposits) |*item| {
-            try item.sszAppend(writer);
-        }
-        for (self.voluntary_exits) |*item| {
-            try item.sszAppend(writer);
-        }
+        try writer.writeAll(self.proposer_slashings_bytes);
+        try writer.writeAll(self.attester_slashings_bytes);
+        try writer.writeAll(self.attestations_bytes);
+        try writer.writeAll(self.deposits_bytes);
+        try writer.writeAll(self.voluntary_exits_bytes);
         try self.execution_payload.sszAppend(writer);
-        for (self.bls_to_execution_changes) |*item| {
-            try item.sszAppend(writer);
-        }
-        for (self.blob_kzg_commitments) |*item| {
-            try item.sszAppend(writer);
-        }
+        try writer.writeAll(self.bls_to_execution_changes_bytes);
+        try writer.writeAll(self.blob_kzg_commitments_bytes);
     }
 
     pub fn toSszBytes(self: *const Self, allocator: std.mem.Allocator) ![]u8 {
@@ -1568,14 +1528,14 @@ pub const BeaconBlockBody = struct {
         result.eth1_data = try ETH1Data.fromSszBytes(bytes[96..168]);
         result.graffiti = try Bytes32.fromSszBytes(bytes[168..200]);
         result.sync_aggregate = try SyncAggregate.fromSszBytes(bytes[220..380]);
-        result.proposer_slashings = @constCast(bytes[offset0..offset1]);
-        result.attester_slashings = @constCast(bytes[offset1..offset2]);
-        result.attestations = @constCast(bytes[offset2..offset3]);
-        result.deposits = @constCast(bytes[offset3..offset4]);
-        result.voluntary_exits = @constCast(bytes[offset4..offset5]);
+        result.proposer_slashings_bytes = bytes[offset0..offset1];
+        result.attester_slashings_bytes = bytes[offset1..offset2];
+        result.attestations_bytes = bytes[offset2..offset3];
+        result.deposits_bytes = bytes[offset3..offset4];
+        result.voluntary_exits_bytes = bytes[offset4..offset5];
         result.execution_payload = try ExecutionPayload.fromSszBytes(bytes[offset5..offset6]);
-        result.bls_to_execution_changes = @constCast(bytes[offset6..offset7]);
-        result.blob_kzg_commitments = @constCast(bytes[offset7..bytes.len]);
+        result.bls_to_execution_changes_bytes = bytes[offset6..offset7];
+        result.blob_kzg_commitments_bytes = bytes[offset7..bytes.len];
         return result;
     }
 
@@ -1591,55 +1551,99 @@ pub const BeaconBlockBody = struct {
         self.eth1_data.treeHashWith(h);
         self.graffiti.treeHashWith(h);
         {
+            // proposer_slashings: fixed-size 416 bytes each
             const sub_idx = h.index();
-            for (self.proposer_slashings) |*item| {
+            const num = self.proposer_slashings_bytes.len / 416;
+            var i: usize = 0;
+            while (i < num) : (i += 1) {
+                const item = ProposerSlashing.fromSszBytes(self.proposer_slashings_bytes[i * 416 .. (i + 1) * 416]) catch unreachable;
                 item.treeHashWith(h);
             }
-            h.merkleizeWithMixin(sub_idx, self.proposer_slashings.len, 16);
+            h.merkleizeWithMixin(sub_idx, num, 16);
         }
         {
+            // attester_slashings: variable-size, offset table
             const sub_idx = h.index();
-            for (self.attester_slashings) |*item| {
-                item.treeHashWith(h);
+            const raw = self.attester_slashings_bytes;
+            if (raw.len >= 4) {
+                const first_off = std.mem.readInt(u32, raw[0..4], .little);
+                const num = first_off / 4;
+                var i: usize = 0;
+                while (i < num) : (i += 1) {
+                    const start = std.mem.readInt(u32, raw[i * 4 ..][0..4], .little);
+                    const end = if (i + 1 < num) std.mem.readInt(u32, raw[(i + 1) * 4 ..][0..4], .little) else @as(u32, @intCast(raw.len));
+                    const item = AttesterSlashing.fromSszBytes(raw[start..end]) catch unreachable;
+                    item.treeHashWith(h);
+                }
+                h.merkleizeWithMixin(sub_idx, num, 2);
+            } else {
+                h.merkleizeWithMixin(sub_idx, 0, 2);
             }
-            h.merkleizeWithMixin(sub_idx, self.attester_slashings.len, 2);
         }
         {
+            // attestations: variable-size, offset table
             const sub_idx = h.index();
-            for (self.attestations) |*item| {
-                item.treeHashWith(h);
+            const raw = self.attestations_bytes;
+            if (raw.len >= 4) {
+                const first_off = std.mem.readInt(u32, raw[0..4], .little);
+                const num = first_off / 4;
+                var i: usize = 0;
+                while (i < num) : (i += 1) {
+                    const start = std.mem.readInt(u32, raw[i * 4 ..][0..4], .little);
+                    const end = if (i + 1 < num) std.mem.readInt(u32, raw[(i + 1) * 4 ..][0..4], .little) else @as(u32, @intCast(raw.len));
+                    const item = Attestation.fromSszBytes(raw[start..end]) catch unreachable;
+                    item.treeHashWith(h);
+                }
+                h.merkleizeWithMixin(sub_idx, num, 128);
+            } else {
+                h.merkleizeWithMixin(sub_idx, 0, 128);
             }
-            h.merkleizeWithMixin(sub_idx, self.attestations.len, 128);
         }
         {
+            // deposits: fixed-size 1240 bytes each
             const sub_idx = h.index();
-            for (self.deposits) |*item| {
+            const num = self.deposits_bytes.len / 1240;
+            var i: usize = 0;
+            while (i < num) : (i += 1) {
+                const item = Deposit.fromSszBytes(self.deposits_bytes[i * 1240 .. (i + 1) * 1240]) catch unreachable;
                 item.treeHashWith(h);
             }
-            h.merkleizeWithMixin(sub_idx, self.deposits.len, 16);
+            h.merkleizeWithMixin(sub_idx, num, 16);
         }
         {
+            // voluntary_exits: fixed-size 112 bytes each
             const sub_idx = h.index();
-            for (self.voluntary_exits) |*item| {
+            const num = self.voluntary_exits_bytes.len / 112;
+            var i: usize = 0;
+            while (i < num) : (i += 1) {
+                const item = SignedVoluntaryExit.fromSszBytes(self.voluntary_exits_bytes[i * 112 .. (i + 1) * 112]) catch unreachable;
                 item.treeHashWith(h);
             }
-            h.merkleizeWithMixin(sub_idx, self.voluntary_exits.len, 16);
+            h.merkleizeWithMixin(sub_idx, num, 16);
         }
         self.sync_aggregate.treeHashWith(h);
         self.execution_payload.treeHashWith(h);
         {
+            // bls_to_execution_changes: fixed-size 172 bytes each
             const sub_idx = h.index();
-            for (self.bls_to_execution_changes) |*item| {
+            const num = self.bls_to_execution_changes_bytes.len / 172;
+            var i: usize = 0;
+            while (i < num) : (i += 1) {
+                const item = SignedBLSToExecutionChange.fromSszBytes(self.bls_to_execution_changes_bytes[i * 172 .. (i + 1) * 172]) catch unreachable;
                 item.treeHashWith(h);
             }
-            h.merkleizeWithMixin(sub_idx, self.bls_to_execution_changes.len, 16);
+            h.merkleizeWithMixin(sub_idx, num, 16);
         }
         {
+            // blob_kzg_commitments: fixed-size 48 bytes each
             const sub_idx = h.index();
-            for (self.blob_kzg_commitments) |*item| {
+            const num = self.blob_kzg_commitments_bytes.len / 48;
+            var i: usize = 0;
+            while (i < num) : (i += 1) {
+                const item = KZGCommitment.fromSszBytes(self.blob_kzg_commitments_bytes[i * 48 .. (i + 1) * 48]) catch unreachable;
                 item.treeHashWith(h);
             }
-            h.merkleizeWithMixin(sub_idx, self.blob_kzg_commitments.len, 4096);
+            h.merkleizeWithMixin(sub_idx, num, 4096);
         }
         h.merkleize(idx);
     }
