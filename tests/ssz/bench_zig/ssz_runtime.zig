@@ -21,6 +21,7 @@ pub const SszError = error{
 
 /// Precomputed zero hashes: zero_hashes[0] = [0; 32], zero_hashes[i] = sha256(zero_hashes[i-1] ++ zero_hashes[i-1]).
 pub const zero_hashes: [65][32]u8 = blk: {
+    @setEvalBranchQuota(10_000_000);
     var zh: [65][32]u8 = undefined;
     zh[0] = [_]u8{0} ** 32;
     for (0..64) |i| {
@@ -77,7 +78,13 @@ pub const Hasher = struct {
     tmp: [64]u8,
     allocator: Allocator,
 
-    pub fn init(allocator: Allocator) Hasher {
+    const default_allocator = std.heap.page_allocator;
+
+    pub fn init() Hasher {
+        return initWithAllocator(default_allocator);
+    }
+
+    pub fn initWithAllocator(allocator: Allocator) Hasher {
         return .{
             .buf = std.ArrayList(u8).init(allocator),
             .tmp = [_]u8{0} ** 64,
@@ -289,7 +296,7 @@ pub const Hasher = struct {
         var chunk_offset = idx;
         var expected_cap: usize = 1;
         for (subtree_sizes.items) |sz| {
-            var tmp_hasher = Hasher.init(self.allocator);
+            var tmp_hasher = Hasher.initWithAllocator(self.allocator);
             defer tmp_hasher.deinit();
             tmp_hasher.buf.appendSlice(
                 self.buf.items[chunk_offset .. chunk_offset + sz * 32],
@@ -444,7 +451,7 @@ pub const HasherPool = struct {
         if (self.pool.items.len > 0) {
             return self.pool.pop();
         }
-        return Hasher.init(self.allocator);
+        return Hasher.initWithAllocator(self.allocator);
     }
 
     pub fn put(self: *HasherPool, h: Hasher) void {
@@ -498,7 +505,7 @@ test "getDepth" {
 }
 
 test "merkleize single chunk" {
-    var h = Hasher.init(std.testing.allocator);
+    var h = Hasher.initWithAllocator(std.testing.allocator);
     defer h.deinit();
     h.putU64(42);
     h.merkleize(0);
@@ -506,7 +513,7 @@ test "merkleize single chunk" {
 }
 
 test "merkleize deterministic" {
-    var h = Hasher.init(std.testing.allocator);
+    var h = Hasher.initWithAllocator(std.testing.allocator);
     defer h.deinit();
 
     const idx1 = h.index();
@@ -526,7 +533,7 @@ test "merkleize deterministic" {
 }
 
 test "mixin" {
-    var h = Hasher.init(std.testing.allocator);
+    var h = Hasher.initWithAllocator(std.testing.allocator);
     defer h.deinit();
     const idx = h.index();
     h.appendBytes32(&[_]u8{ 1, 1, 1, 1 });
@@ -570,7 +577,7 @@ test "parseBitlist" {
 }
 
 test "progressive merkleize" {
-    var h = Hasher.init(std.testing.allocator);
+    var h = Hasher.initWithAllocator(std.testing.allocator);
     defer h.deinit();
 
     // 0 chunks => zero hash
@@ -594,7 +601,7 @@ test "progressive merkleize" {
 }
 
 test "progressive merkleize with mixin" {
-    var h = Hasher.init(std.testing.allocator);
+    var h = Hasher.initWithAllocator(std.testing.allocator);
     defer h.deinit();
     const idx = h.index();
     h.putU64(1);
@@ -606,7 +613,7 @@ test "progressive merkleize with mixin" {
 }
 
 test "fillUpTo32" {
-    var h = Hasher.init(std.testing.allocator);
+    var h = Hasher.initWithAllocator(std.testing.allocator);
     defer h.deinit();
     h.appendU8(0xFF);
     h.fillUpTo32();
@@ -617,7 +624,7 @@ test "fillUpTo32" {
 }
 
 test "put methods produce 32-byte chunks" {
-    var h = Hasher.init(std.testing.allocator);
+    var h = Hasher.initWithAllocator(std.testing.allocator);
     defer h.deinit();
 
     h.putBool(true);
@@ -641,7 +648,7 @@ test "put methods produce 32-byte chunks" {
 }
 
 test "append methods do not pad" {
-    var h = Hasher.init(std.testing.allocator);
+    var h = Hasher.initWithAllocator(std.testing.allocator);
     defer h.deinit();
 
     h.appendBool(false);

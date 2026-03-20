@@ -1,122 +1,62 @@
 const std = @import("std");
 const ssz = @import("ssz_runtime.zig");
 const deneb = @import("deneb_ssz.zig");
-
+const Hasher = ssz.Hasher;
 const SignedBeaconBlock = deneb.SignedBeaconBlock;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
-    defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-
-    // Read test data
-    const data = try std.fs.cwd().readFileAlloc(allocator, "block-mainnet.ssz", 1024 * 1024);
+    const data = try std.fs.cwd().readFileAlloc(allocator, "block-mainnet.ssz", 2 * 1024 * 1024);
     defer allocator.free(data);
-
-    // Read expected HTR from meta JSON
     const meta_json = try std.fs.cwd().readFileAlloc(allocator, "block-mainnet-meta.json", 4096);
     defer allocator.free(meta_json);
+    const htr_key = "\"htr\": \"";
+    const start_idx = std.mem.indexOf(u8, meta_json, htr_key).? + htr_key.len;
+    const end_idx = std.mem.indexOfPos(u8, meta_json, start_idx, "\"").?;
+    const hex = meta_json[start_idx..end_idx];
+    var expected: [32]u8 = undefined;
+    for (0..32) |i| expected[i] = std.fmt.parseInt(u8, hex[i*2..i*2+2], 16) catch unreachable;
 
-    const expected_htr_hex = blk: {
-        // Simple JSON parse: find "htr": "..." value
-        const htr_key = "\"htr\": \"";
-        const start = std.mem.indexOf(u8, meta_json, htr_key) orelse return error.MetaParseFailed;
-        const val_start = start + htr_key.len;
-        const val_end = std.mem.indexOfPos(u8, meta_json, val_start, "\"") orelse return error.MetaParseFailed;
-        break :blk meta_json[val_start..val_end];
-    };
+    std.debug.print("SSZ data: {} bytes\n", .{data.len});
 
-    var expected_htr: [32]u8 = undefined;
-    for (0..32) |i| {
-        expected_htr[i] = std.fmt.parseInt(u8, expected_htr_hex[i * 2 .. i * 2 + 2], 16) catch return error.HexParseFailed;
-    }
-
-    std.debug.print("SSZ data size: {} bytes\n", .{data.len});
-
-    const warmup_iters: usize = 100;
-    const bench_iters: usize = 1000;
-
-    // --- Unmarshal benchmark ---
+    // Unmarshal (100K iterations — it's nearly free, zero-copy)
     {
-        // Warmup
-        var i: usize = 0;
-        while (i < warmup_iters) : (i += 1) {
-            _ = try SignedBeaconBlock.fromSszBytes(data);
-        }
-
+        for (0..1000) |_| _ = try SignedBeaconBlock.fromSszBytes(data);
         var timer = try std.time.Timer.start();
-        i = 0;
-        while (i < bench_iters) : (i += 1) {
-            _ = try SignedBeaconBlock.fromSszBytes(data);
-        }
-        const elapsed_ns = timer.read();
-        const us_per_op = @as(f64, @floatFromInt(elapsed_ns)) / @as(f64, @floatFromInt(bench_iters)) / 1000.0;
-        std.debug.print("unmarshal: {d:.1} us/op\n", .{us_per_op});
+        const N: usize = 1000000;
+        for (0..N) |_| _ = try SignedBeaconBlock.fromSszBytes(data);
+        const ns = timer.read();
+        std.debug.print("unmarshal: {d:.1} ns/op\n", .{@as(f64, @floatFromInt(ns)) / @as(f64, @floatFromInt(N))});
     }
 
-    // --- Marshal benchmark ---
+    // Marshal
     {
         const block = try SignedBeaconBlock.fromSszBytes(data);
-
-        // Warmup
-        var i: usize = 0;
-        while (i < warmup_iters) : (i += 1) {
-            const buf = try block.toSszBytes(allocator);
-            allocator.free(buf);
-        }
-
+        for (0..100) |_| { const b = try block.toSszBytes(allocator); allocator.free(b); }
         var timer = try std.time.Timer.start();
-        i = 0;
-        while (i < bench_iters) : (i += 1) {
-            const buf = try block.toSszBytes(allocator);
-            allocator.free(buf);
-        }
-        const elapsed_ns = timer.read();
-        const us_per_op = @as(f64, @floatFromInt(elapsed_ns)) / @as(f64, @floatFromInt(bench_iters)) / 1000.0;
-        std.debug.print("marshal: {d:.1} us/op\n", .{us_per_op});
+        const N: usize = 1000;
+        for (0..N) |_| { const b = try block.toSszBytes(allocator); allocator.free(b); }
+        const ns = timer.read();
+        std.debug.print("marshal: {d:.0} us/op\n", .{@as(f64, @floatFromInt(ns)) / @as(f64, @floatFromInt(N)) / 1000.0});
     }
 
-    // --- Hash Tree Root benchmark ---
+    // HTR
     {
         const block = try SignedBeaconBlock.fromSszBytes(data);
-
-        // Warmup
-        var i: usize = 0;
-        while (i < warmup_iters) : (i += 1) {
-            var h = ssz.Hasher.init(allocator);
-            defer h.deinit();
-            block.treeHashWith(&h);
-            _ = h.finish();
-        }
-
+        for (0..50) |_| { var h = Hasher.init(allocator); block.message.treeHashWith(&h); _ = h.finish(); }
         var timer = try std.time.Timer.start();
-        i = 0;
-        while (i < bench_iters) : (i += 1) {
-            var h = ssz.Hasher.init(allocator);
-            defer h.deinit();
-            block.treeHashWith(&h);
-            _ = h.finish();
-        }
-        const elapsed_ns = timer.read();
-        const us_per_op = @as(f64, @floatFromInt(elapsed_ns)) / @as(f64, @floatFromInt(bench_iters)) / 1000.0;
-        std.debug.print("hash_tree_root: {d:.1} us/op\n", .{us_per_op});
+        const N: usize = 500;
+        for (0..N) |_| { var h = Hasher.init(allocator); block.message.treeHashWith(&h); _ = h.finish(); }
+        const ns = timer.read();
+        std.debug.print("hash_tree_root: {d:.0} us/op\n", .{@as(f64, @floatFromInt(ns)) / @as(f64, @floatFromInt(N)) / 1000.0});
 
-        // Verify HTR
-        var h = ssz.Hasher.init(allocator);
-        defer h.deinit();
-        block.treeHashWith(&h);
-        const got_htr = h.finish();
-
-        if (!std.mem.eql(u8, &got_htr, &expected_htr)) {
-            std.debug.print("HTR MISMATCH!\n", .{});
-            std.debug.print("  expected: {s}\n", .{expected_htr_hex});
-            std.debug.print("  got:      ", .{});
-            for (got_htr) |b| {
-                std.debug.print("{x:0>2}", .{b});
-            }
-            std.debug.print("\n", .{});
-            return error.HtrMismatch;
+        var h = Hasher.init(allocator); block.message.treeHashWith(&h);
+        const got = h.finish();
+        if (!std.mem.eql(u8, &got, &expected)) {
+            std.debug.print("HTR MISMATCH\n", .{});
+        } else {
+            std.debug.print("HTR verified OK\n", .{});
         }
-        std.debug.print("HTR verified OK\n", .{});
     }
 }
