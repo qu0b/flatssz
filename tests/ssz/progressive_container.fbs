@@ -1,0 +1,14 @@
+namespace ssz_test;
+
+struct Bytes32 {
+  data:[ubyte:32];
+}
+
+// ProgressiveContainer with a gap at index 1.
+// Active fields: index 0, 2, 3 → active_fields bitvector = [0b00001101] = [0x0d]
+table ProgressiveExample (ssz_progressive) {
+  genesis_time:ulong (id:0);
+  // id:1 is a gap (field removed in a later fork)
+  slot:ulong (id:2);
+  state_root:Bytes32 (id:3);
+}

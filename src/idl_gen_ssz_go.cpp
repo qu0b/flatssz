@@ -62,6 +62,8 @@ enum class SszType {
   Bitlist,
   Bitvector,
   Union,
+  ProgressiveContainer,
+  ProgressiveList,
 };
 
 struct SszFieldInfo {
@@ -85,9 +87,17 @@ struct SszFieldInfo {
 struct SszContainerInfo {
   uint32_t static_size;
   bool is_fixed;
+  bool is_progressive;
+  uint32_t max_ssz_index;
+  std::vector<uint8_t> active_fields_bitvector;
+  std::map<const FieldDef *, uint32_t> field_ssz_indices;
   std::vector<const FieldDef *> all_fields;
   std::vector<const FieldDef *> dynamic_fields;
   std::map<const FieldDef *, SszFieldInfo> field_infos;
+
+  SszContainerInfo()
+      : static_size(0), is_fixed(true), is_progressive(false),
+        max_ssz_index(0) {}
 };
 
 // ---------------------------------------------------------------------------
@@ -287,6 +297,15 @@ class SszGoGenerator : public BaseGenerator {
                          const SymbolTable<Value> &attrs, SszFieldInfo &info) {
     auto elem_type = type.VectorType();
 
+    // Check for progressive bitlist (EIP-7916)
+    if (attrs.Lookup("ssz_progressive_bitlist")) {
+      info.ssz_type = SszType::Bitlist;
+      info.limit = 0;  // unbounded
+      info.fixed_size = 0;
+      info.is_dynamic = true;
+      return true;
+    }
+
     // Check for bitlist attribute
     if (attrs.Lookup("ssz_bitlist")) {
       auto max_attr = attrs.Lookup("ssz_max");
@@ -299,6 +318,16 @@ class SszGoGenerator : public BaseGenerator {
       info.limit = StringToUInt(max_attr->constant.c_str());
       info.fixed_size = 0;
       info.is_dynamic = true;
+      return true;
+    }
+
+    // Check for progressive list (EIP-7916) — no ssz_max needed
+    if (attrs.Lookup("ssz_progressive_list")) {
+      info.ssz_type = SszType::ProgressiveList;
+      info.fixed_size = 0;
+      info.is_dynamic = true;
+      info.elem_info.reset(new SszFieldInfo());
+      if (!ResolveElemType(field, elem_type, *info.elem_info)) return false;
       return true;
     }
 
@@ -450,6 +479,32 @@ class SszGoGenerator : public BaseGenerator {
 
       container.field_infos.emplace(&field, std::move(info));
     }
+
+    // Detect progressive container (EIP-7495)
+    if (struct_def.attributes.Lookup("ssz_progressive")) {
+      container.is_progressive = true;
+      container.max_ssz_index = 0;
+
+      for (auto *field : container.all_fields) {
+        auto id_attr = field->attributes.Lookup("id");
+        if (id_attr) {
+          uint32_t idx = static_cast<uint32_t>(
+              StringToUInt(id_attr->constant.c_str()));
+          container.field_ssz_indices[field] = idx;
+          if (idx > container.max_ssz_index) container.max_ssz_index = idx;
+        }
+      }
+
+      // Compute active_fields bitvector
+      uint32_t bitvec_bytes = (container.max_ssz_index + 8) / 8;
+      container.active_fields_bitvector.resize(bitvec_bytes, 0);
+      for (auto &kv : container.field_ssz_indices) {
+        uint32_t idx = kv.second;
+        container.active_fields_bitvector[idx / 8] |=
+            static_cast<uint8_t>(1u << (idx % 8));
+      }
+    }
+
     return true;
   }
 
@@ -486,6 +541,7 @@ class SszGoGenerator : public BaseGenerator {
         }
         return "UNKNOWN";
       }
+      case SszType::ProgressiveList:
       case SszType::List: {
         // String fields map to []byte in SSZ Go
         if (field.value.type.base_type == BASE_TYPE_STRING) {
@@ -503,6 +559,9 @@ class SszGoGenerator : public BaseGenerator {
         return "[]byte";
       case SszType::Bitvector:
         return "[" + NumToString((info.bitsize + 7) / 8) + "]byte";
+      case SszType::ProgressiveContainer:
+        if (info.struct_def) { return info.struct_def->name; }
+        return "UNKNOWN";
       case SszType::Union:
         return "interface{}";
     }
@@ -622,6 +681,7 @@ class SszGoGenerator : public BaseGenerator {
                     const std::string &indent) {
     std::string &c = *code;
     switch (info.ssz_type) {
+      case SszType::ProgressiveList:
       case SszType::List: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
           // List of byte lists ([][]byte): offsets + each element's length
@@ -796,6 +856,7 @@ class SszGoGenerator : public BaseGenerator {
         break;
       }
 
+      case SszType::ProgressiveList:
       case SszType::List: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
           // List of byte lists ([][]byte): offset-based dynamic encoding
@@ -1143,6 +1204,7 @@ class SszGoGenerator : public BaseGenerator {
                             const std::string &indent) {
     std::string &c = *code;
     switch (info.ssz_type) {
+      case SszType::ProgressiveList:
       case SszType::List: {
         if (info.elem_info && info.elem_info->ssz_type == SszType::List) {
           // List of byte lists ([][]byte)
@@ -1324,18 +1386,56 @@ class SszGoGenerator : public BaseGenerator {
     c += "\tidx := hh.Index()\n";
     c += "\n";
 
-    for (auto *field : container.all_fields) {
-      auto it = container.field_infos.find(field);
-      if (it == container.field_infos.end()) continue;
-      auto &info = it->second;
-      std::string fname = "t." + namer_.Field(*field);
+    if (container.is_progressive) {
+      // EIP-7495: emit leaves for indices 0..max_ssz_index,
+      // filling gaps with zero-hash for inactive fields.
+      // Build a map from ssz_index → field for quick lookup.
+      std::map<uint32_t, const FieldDef *> index_to_field;
+      for (auto &kv : container.field_ssz_indices) {
+        index_to_field[kv.second] = kv.first;
+      }
 
-      c += "\t// Field '" + field->name + "'\n";
-      GenHashField(info, fname, *field, &c, "\t");
+      for (uint32_t i = 0; i <= container.max_ssz_index; i++) {
+        auto fit = index_to_field.find(i);
+        if (fit != index_to_field.end()) {
+          auto *field = fit->second;
+          auto iit = container.field_infos.find(field);
+          if (iit == container.field_infos.end()) continue;
+          c += "\t// Index " + NumToString(i) + ": " + field->name + "\n";
+          GenHashField(iit->second, "t." + namer_.Field(*field), *field, &c,
+                       "\t");
+        } else {
+          c += "\t// Index " + NumToString(i) + ": gap (inactive)\n";
+          c += "\thh.PutUint8(0)\n";
+        }
+      }
       c += "\n";
+
+      // Emit active_fields bitvector literal
+      c += "\thh.MerkleizeProgressiveWithActiveFields(idx, []byte{";
+      for (size_t i = 0; i < container.active_fields_bitvector.size(); i++) {
+        if (i > 0) c += ", ";
+        char hex[8];
+        snprintf(hex, sizeof(hex), "0x%02x",
+                 container.active_fields_bitvector[i]);
+        c += hex;
+      }
+      c += "})\n";
+    } else {
+      for (auto *field : container.all_fields) {
+        auto it = container.field_infos.find(field);
+        if (it == container.field_infos.end()) continue;
+        auto &info = it->second;
+        std::string fname = "t." + namer_.Field(*field);
+
+        c += "\t// Field '" + field->name + "'\n";
+        GenHashField(info, fname, *field, &c, "\t");
+        c += "\n";
+      }
+
+      c += "\thh.Merkleize(idx)\n";
     }
 
-    c += "\thh.Merkleize(idx)\n";
     c += "\treturn nil\n";
     c += "}\n";
   }
@@ -1468,6 +1568,46 @@ class SszGoGenerator : public BaseGenerator {
         c += indent + "\treturn err\n";
         c += indent + "}\n";
         break;
+
+      case SszType::ProgressiveContainer:
+        c += indent + "if err := " + var +
+             ".HashTreeRootWith(hh); err != nil {\n";
+        c += indent + "\treturn err\n";
+        c += indent + "}\n";
+        break;
+
+      case SszType::ProgressiveList: {
+        // EIP-7916: use MerkleizeProgressiveWithMixin instead of MerkleizeWithMixin
+        if (info.elem_info && info.elem_info->ssz_type == SszType::Uint8) {
+          c += indent + "{\n";
+          c += indent + "\tsubIdx := hh.Index()\n";
+          c += indent + "\thh.AppendBytes32(" + var + ")\n";
+          c += indent + "\thh.MerkleizeProgressiveWithMixin(subIdx, uint64(len(" +
+               var + ")))\n";
+          c += indent + "}\n";
+        } else if (info.elem_info &&
+                   info.elem_info->ssz_type == SszType::Container) {
+          c += indent + "{\n";
+          c += indent + "\tsubIdx := hh.Index()\n";
+          c += indent + "\tfor _, item := range " + var + " {\n";
+          c += indent + "\t\tif err := item.HashTreeRootWith(hh); err != nil {\n";
+          c += indent + "\t\t\treturn err\n";
+          c += indent + "\t\t}\n";
+          c += indent + "\t}\n";
+          c += indent + "\thh.MerkleizeProgressiveWithMixin(subIdx, uint64(len(" +
+               var + ")))\n";
+          c += indent + "}\n";
+        } else if (info.elem_info) {
+          c += indent + "{\n";
+          c += indent + "\tsubIdx := hh.Index()\n";
+          GenHashPrimitiveSlice(info, var, code, indent + "\t");
+          c += indent + "\thh.FillUpTo32()\n";
+          c += indent + "\thh.MerkleizeProgressiveWithMixin(subIdx, uint64(len(" +
+               var + ")))\n";
+          c += indent + "}\n";
+        }
+        break;
+      }
 
       case SszType::Union:
         break;

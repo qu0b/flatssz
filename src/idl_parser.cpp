@@ -2924,6 +2924,8 @@ CheckedError Parser::ParseDecl(const char* filename) {
       // Verify we have a contiguous set, and reassign vtable offsets.
       FLATBUFFERS_ASSERT(fields.size() <=
                          flatbuffers::numeric_limits<voffset_t>::max());
+      bool is_ssz_progressive =
+          struct_def->attributes.Lookup("ssz_progressive") != nullptr;
       for (voffset_t i = 0; i < static_cast<voffset_t>(fields.size()); i++) {
         auto& field = *fields[i];
         const auto& id_str = field.attributes.Lookup("id")->constant;
@@ -2937,10 +2939,20 @@ CheckedError Parser::ParseDecl(const char* filename) {
         if (!done)
           return Error("field id\'s must be non-negative number, field: " +
                        field.name + ", id: " + id_str);
-        if (i != id)
-          return Error("field id\'s must be consecutive from 0, id " +
-                       NumToString(i) + " missing or set twice, field: " +
-                       field.name + ", id: " + id_str);
+        if (is_ssz_progressive) {
+          // SSZ progressive containers (EIP-7495) allow sparse field IDs.
+          // The id maps to the SSZ tree index; gaps represent inactive fields.
+          // IDs must be unique and <= 255 (active_fields is max 256 bits).
+          if (id > 255)
+            return Error("ssz_progressive field id must be <= 255, field: " +
+                         field.name + ", id: " + id_str);
+        } else {
+          if (i != id)
+            return Error("field id\'s must be consecutive from 0, id " +
+                         NumToString(i) + " missing or set twice, field: " +
+                         field.name + ", id: " + id_str);
+        }
+        // vtable offsets are always dense (by position, not by declared id)
         field.value.offset = FieldIndexToOffset(i);
       }
     }
