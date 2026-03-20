@@ -1,0 +1,13 @@
+{
+  "name": "ssz-flatbuffers",
+  "version": "0.1.0",
+  "description": "SSZ runtime support for flatssz-generated TypeScript code",
+  "main": "ssz_runtime.js",
+  "types": "ssz_runtime.d.ts",
+  "files": [
+    "ssz_runtime.ts",
+    "ssz_runtime.js",
+    "ssz_runtime.d.ts"
+  ],
+  "license": "Apache-2.0"
+}
