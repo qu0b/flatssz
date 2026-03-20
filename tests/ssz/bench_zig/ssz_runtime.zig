@@ -8,6 +8,16 @@
 const std = @import("std");
 const Sha256 = std.crypto.hash.sha2.Sha256;
 const Allocator = std.mem.Allocator;
+const hashtree = @cImport(@cInclude("hashtree.h"));
+
+/// Initialize the hashtree SIMD SHA-256 library. Must be called once before hashing.
+var hashtree_initialized: bool = false;
+pub fn initHashtree() void {
+    if (!hashtree_initialized) {
+        _ = hashtree.hashtree_init(null);
+        hashtree_initialized = true;
+    }
+}
 
 // ---- Errors ----
 
@@ -404,15 +414,12 @@ pub const Hasher = struct {
 
             const pairs = (self.buf.items.len - idx) / 64;
 
-            // Hash each pair of 32-byte chunks
-            var p: usize = 0;
-            while (p < pairs) : (p += 1) {
-                const pair_start = idx + p * 64;
-                var sha = Sha256.init(.{});
-                sha.update(self.buf.items[pair_start .. pair_start + 64]);
-                const hash = sha.finalResult();
-                @memcpy(self.buf.items[idx + p * 32 .. idx + p * 32 + 32], &hash);
-            }
+            // Batch hash all pairs using SIMD-accelerated hashtree
+            hashtree.hashtree_hash(
+                self.buf.items[idx..].ptr,
+                self.buf.items[idx..].ptr,
+                @intCast(pairs),
+            );
             self.buf.shrinkRetainingCapacity(idx + pairs * 32);
         }
     }
