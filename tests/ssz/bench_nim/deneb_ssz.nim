@@ -21,12 +21,6 @@ proc fromSSZBytes*(T: typedesc[Bytes4], data: openArray[byte]): Bytes4 =
     raise newException(SszError, "buffer too small")
   copyMem(addr result.data[0], unsafeAddr data[0], 4)
 
-proc hashTreeRoot*(t: Bytes4): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Bytes4, h: var Hasher) =
   let idx = h.index()
 
@@ -34,6 +28,12 @@ proc hashTreeRootWith*(t: Bytes4, h: var Hasher) =
   h.putBytes(t.data)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Bytes4): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Bytes20* = object
   data*: array[20, byte]
@@ -53,12 +53,6 @@ proc fromSSZBytes*(T: typedesc[Bytes20], data: openArray[byte]): Bytes20 =
     raise newException(SszError, "buffer too small")
   copyMem(addr result.data[0], unsafeAddr data[0], 20)
 
-proc hashTreeRoot*(t: Bytes20): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Bytes20, h: var Hasher) =
   let idx = h.index()
 
@@ -66,6 +60,12 @@ proc hashTreeRootWith*(t: Bytes20, h: var Hasher) =
   h.putBytes(t.data)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Bytes20): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Bytes32* = object
   data*: array[32, byte]
@@ -85,12 +85,6 @@ proc fromSSZBytes*(T: typedesc[Bytes32], data: openArray[byte]): Bytes32 =
     raise newException(SszError, "buffer too small")
   copyMem(addr result.data[0], unsafeAddr data[0], 32)
 
-proc hashTreeRoot*(t: Bytes32): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Bytes32, h: var Hasher) =
   let idx = h.index()
 
@@ -98,6 +92,12 @@ proc hashTreeRootWith*(t: Bytes32, h: var Hasher) =
   h.putBytes(t.data)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Bytes32): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Bytes48* = object
   data*: array[48, byte]
@@ -117,12 +117,6 @@ proc fromSSZBytes*(T: typedesc[Bytes48], data: openArray[byte]): Bytes48 =
     raise newException(SszError, "buffer too small")
   copyMem(addr result.data[0], unsafeAddr data[0], 48)
 
-proc hashTreeRoot*(t: Bytes48): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Bytes48, h: var Hasher) =
   let idx = h.index()
 
@@ -130,6 +124,12 @@ proc hashTreeRootWith*(t: Bytes48, h: var Hasher) =
   h.putBytes(t.data)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Bytes48): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Bytes96* = object
   data*: array[96, byte]
@@ -149,12 +149,6 @@ proc fromSSZBytes*(T: typedesc[Bytes96], data: openArray[byte]): Bytes96 =
     raise newException(SszError, "buffer too small")
   copyMem(addr result.data[0], unsafeAddr data[0], 96)
 
-proc hashTreeRoot*(t: Bytes96): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Bytes96, h: var Hasher) =
   let idx = h.index()
 
@@ -162,6 +156,12 @@ proc hashTreeRootWith*(t: Bytes96, h: var Hasher) =
   h.putBytes(t.data)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Bytes96): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Bytes256* = object
   data*: array[256, byte]
@@ -181,12 +181,6 @@ proc fromSSZBytes*(T: typedesc[Bytes256], data: openArray[byte]): Bytes256 =
     raise newException(SszError, "buffer too small")
   copyMem(addr result.data[0], unsafeAddr data[0], 256)
 
-proc hashTreeRoot*(t: Bytes256): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Bytes256, h: var Hasher) =
   let idx = h.index()
 
@@ -194,6 +188,12 @@ proc hashTreeRootWith*(t: Bytes256, h: var Hasher) =
   h.putBytes(t.data)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Bytes256): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Fork* = object
   previousVersion*: array[4, byte]
@@ -223,12 +223,6 @@ proc fromSSZBytes*(T: typedesc[Fork], data: openArray[byte]): Fork =
   copyMem(addr result.currentVersion[0], unsafeAddr data[4], 4)
   littleEndian64(addr result.epoch, unsafeAddr data[8])
 
-proc hashTreeRoot*(t: Fork): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Fork, h: var Hasher) =
   let idx = h.index()
 
@@ -242,6 +236,12 @@ proc hashTreeRootWith*(t: Fork, h: var Hasher) =
   h.putUint64(t.epoch)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Fork): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Checkpoint* = object
   epoch*: uint64
@@ -268,12 +268,6 @@ proc fromSSZBytes*(T: typedesc[Checkpoint], data: openArray[byte]): Checkpoint =
   littleEndian64(addr result.epoch, unsafeAddr data[0])
   copyMem(addr result.root[0], unsafeAddr data[8], 32)
 
-proc hashTreeRoot*(t: Checkpoint): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Checkpoint, h: var Hasher) =
   let idx = h.index()
 
@@ -284,6 +278,12 @@ proc hashTreeRootWith*(t: Checkpoint, h: var Hasher) =
   h.putBytes(t.root)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Checkpoint): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type BeaconBlockHeader* = object
   slot*: uint64
@@ -323,12 +323,6 @@ proc fromSSZBytes*(T: typedesc[BeaconBlockHeader], data: openArray[byte]): Beaco
   copyMem(addr result.stateRoot[0], unsafeAddr data[48], 32)
   copyMem(addr result.bodyRoot[0], unsafeAddr data[80], 32)
 
-proc hashTreeRoot*(t: BeaconBlockHeader): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: BeaconBlockHeader, h: var Hasher) =
   let idx = h.index()
 
@@ -348,6 +342,12 @@ proc hashTreeRootWith*(t: BeaconBlockHeader, h: var Hasher) =
   h.putBytes(t.bodyRoot)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: BeaconBlockHeader): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type SignedBeaconBlockHeader* = object
   message*: BeaconBlockHeader
@@ -370,12 +370,6 @@ proc fromSSZBytes*(T: typedesc[SignedBeaconBlockHeader], data: openArray[byte]):
   result.message = fromSSZBytes(BeaconBlockHeader, data.toOpenArray(0, 112 - 1))
   copyMem(addr result.signature[0], unsafeAddr data[112], 96)
 
-proc hashTreeRoot*(t: SignedBeaconBlockHeader): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: SignedBeaconBlockHeader, h: var Hasher) =
   let idx = h.index()
 
@@ -386,6 +380,12 @@ proc hashTreeRootWith*(t: SignedBeaconBlockHeader, h: var Hasher) =
   h.putBytes(t.signature)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: SignedBeaconBlockHeader): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type ETH1Data* = object
   depositRoot*: array[32, byte]
@@ -415,12 +415,6 @@ proc fromSSZBytes*(T: typedesc[ETH1Data], data: openArray[byte]): ETH1Data =
   littleEndian64(addr result.depositCount, unsafeAddr data[32])
   copyMem(addr result.blockHash[0], unsafeAddr data[40], 32)
 
-proc hashTreeRoot*(t: ETH1Data): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: ETH1Data, h: var Hasher) =
   let idx = h.index()
 
@@ -434,6 +428,12 @@ proc hashTreeRootWith*(t: ETH1Data, h: var Hasher) =
   h.putBytes(t.blockHash)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: ETH1Data): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Validator* = object
   pubkey*: array[48, byte]
@@ -499,12 +499,6 @@ proc fromSSZBytes*(T: typedesc[Validator], data: openArray[byte]): Validator =
   littleEndian64(addr result.exitEpoch, unsafeAddr data[105])
   littleEndian64(addr result.withdrawableEpoch, unsafeAddr data[113])
 
-proc hashTreeRoot*(t: Validator): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Validator, h: var Hasher) =
   let idx = h.index()
 
@@ -533,6 +527,12 @@ proc hashTreeRootWith*(t: Validator, h: var Hasher) =
   h.putUint64(t.withdrawableEpoch)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Validator): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type AttestationData* = object
   slot*: uint64
@@ -572,12 +572,6 @@ proc fromSSZBytes*(T: typedesc[AttestationData], data: openArray[byte]): Attesta
   result.source = fromSSZBytes(Checkpoint, data.toOpenArray(48, 88 - 1))
   result.target = fromSSZBytes(Checkpoint, data.toOpenArray(88, 128 - 1))
 
-proc hashTreeRoot*(t: AttestationData): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: AttestationData, h: var Hasher) =
   let idx = h.index()
 
@@ -597,6 +591,12 @@ proc hashTreeRootWith*(t: AttestationData, h: var Hasher) =
   hashTreeRootWith(t.target, h)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: AttestationData): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type ProposerSlashing* = object
   signedHeader1*: SignedBeaconBlockHeader
@@ -619,12 +619,6 @@ proc fromSSZBytes*(T: typedesc[ProposerSlashing], data: openArray[byte]): Propos
   result.signedHeader1 = fromSSZBytes(SignedBeaconBlockHeader, data.toOpenArray(0, 208 - 1))
   result.signedHeader2 = fromSSZBytes(SignedBeaconBlockHeader, data.toOpenArray(208, 416 - 1))
 
-proc hashTreeRoot*(t: ProposerSlashing): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: ProposerSlashing, h: var Hasher) =
   let idx = h.index()
 
@@ -635,6 +629,12 @@ proc hashTreeRootWith*(t: ProposerSlashing, h: var Hasher) =
   hashTreeRootWith(t.signedHeader2, h)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: ProposerSlashing): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type DepositData* = object
   pubkey*: array[48, byte]
@@ -667,12 +667,6 @@ proc fromSSZBytes*(T: typedesc[DepositData], data: openArray[byte]): DepositData
   littleEndian64(addr result.amount, unsafeAddr data[80])
   copyMem(addr result.signature[0], unsafeAddr data[88], 96)
 
-proc hashTreeRoot*(t: DepositData): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: DepositData, h: var Hasher) =
   let idx = h.index()
 
@@ -689,6 +683,12 @@ proc hashTreeRootWith*(t: DepositData, h: var Hasher) =
   h.putBytes(t.signature)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: DepositData): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Deposit* = object
   proof*: array[1056, byte]
@@ -711,12 +711,6 @@ proc fromSSZBytes*(T: typedesc[Deposit], data: openArray[byte]): Deposit =
   copyMem(addr result.proof[0], unsafeAddr data[0], 1056)
   result.data = fromSSZBytes(DepositData, data.toOpenArray(1056, 1240 - 1))
 
-proc hashTreeRoot*(t: Deposit): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Deposit, h: var Hasher) =
   let idx = h.index()
 
@@ -727,6 +721,12 @@ proc hashTreeRootWith*(t: Deposit, h: var Hasher) =
   hashTreeRootWith(t.data, h)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Deposit): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type VoluntaryExit* = object
   epoch*: uint64
@@ -757,12 +757,6 @@ proc fromSSZBytes*(T: typedesc[VoluntaryExit], data: openArray[byte]): Voluntary
   littleEndian64(addr result.epoch, unsafeAddr data[0])
   littleEndian64(addr result.validatorIndex, unsafeAddr data[8])
 
-proc hashTreeRoot*(t: VoluntaryExit): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: VoluntaryExit, h: var Hasher) =
   let idx = h.index()
 
@@ -773,6 +767,12 @@ proc hashTreeRootWith*(t: VoluntaryExit, h: var Hasher) =
   h.putUint64(t.validatorIndex)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: VoluntaryExit): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type SignedVoluntaryExit* = object
   message*: VoluntaryExit
@@ -795,12 +795,6 @@ proc fromSSZBytes*(T: typedesc[SignedVoluntaryExit], data: openArray[byte]): Sig
   result.message = fromSSZBytes(VoluntaryExit, data.toOpenArray(0, 16 - 1))
   copyMem(addr result.signature[0], unsafeAddr data[16], 96)
 
-proc hashTreeRoot*(t: SignedVoluntaryExit): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: SignedVoluntaryExit, h: var Hasher) =
   let idx = h.index()
 
@@ -811,6 +805,12 @@ proc hashTreeRootWith*(t: SignedVoluntaryExit, h: var Hasher) =
   h.putBytes(t.signature)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: SignedVoluntaryExit): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type SyncAggregate* = object
   syncCommitteeBits*: array[64, byte]
@@ -833,12 +833,6 @@ proc fromSSZBytes*(T: typedesc[SyncAggregate], data: openArray[byte]): SyncAggre
   copyMem(addr result.syncCommitteeBits[0], unsafeAddr data[0], 64)
   copyMem(addr result.syncCommitteeSignature[0], unsafeAddr data[64], 96)
 
-proc hashTreeRoot*(t: SyncAggregate): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: SyncAggregate, h: var Hasher) =
   let idx = h.index()
 
@@ -849,6 +843,12 @@ proc hashTreeRootWith*(t: SyncAggregate, h: var Hasher) =
   h.putBytes(t.syncCommitteeSignature)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: SyncAggregate): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Withdrawal* = object
   index*: uint64
@@ -889,12 +889,6 @@ proc fromSSZBytes*(T: typedesc[Withdrawal], data: openArray[byte]): Withdrawal =
   copyMem(addr result.address[0], unsafeAddr data[16], 20)
   littleEndian64(addr result.amount, unsafeAddr data[36])
 
-proc hashTreeRoot*(t: Withdrawal): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: Withdrawal, h: var Hasher) =
   let idx = h.index()
 
@@ -911,6 +905,12 @@ proc hashTreeRootWith*(t: Withdrawal, h: var Hasher) =
   h.putUint64(t.amount)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Withdrawal): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type BLSToExecutionChange* = object
   validatorIndex*: uint64
@@ -940,12 +940,6 @@ proc fromSSZBytes*(T: typedesc[BLSToExecutionChange], data: openArray[byte]): BL
   copyMem(addr result.fromBlsPubkey[0], unsafeAddr data[8], 48)
   copyMem(addr result.toExecutionAddress[0], unsafeAddr data[56], 20)
 
-proc hashTreeRoot*(t: BLSToExecutionChange): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: BLSToExecutionChange, h: var Hasher) =
   let idx = h.index()
 
@@ -959,6 +953,12 @@ proc hashTreeRootWith*(t: BLSToExecutionChange, h: var Hasher) =
   h.putBytes(t.toExecutionAddress)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: BLSToExecutionChange): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type SignedBLSToExecutionChange* = object
   message*: BLSToExecutionChange
@@ -981,12 +981,6 @@ proc fromSSZBytes*(T: typedesc[SignedBLSToExecutionChange], data: openArray[byte
   result.message = fromSSZBytes(BLSToExecutionChange, data.toOpenArray(0, 76 - 1))
   copyMem(addr result.signature[0], unsafeAddr data[76], 96)
 
-proc hashTreeRoot*(t: SignedBLSToExecutionChange): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: SignedBLSToExecutionChange, h: var Hasher) =
   let idx = h.index()
 
@@ -997,6 +991,12 @@ proc hashTreeRootWith*(t: SignedBLSToExecutionChange, h: var Hasher) =
   h.putBytes(t.signature)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: SignedBLSToExecutionChange): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type KZGCommitment* = object
   data*: array[48, byte]
@@ -1016,12 +1016,6 @@ proc fromSSZBytes*(T: typedesc[KZGCommitment], data: openArray[byte]): KZGCommit
     raise newException(SszError, "buffer too small")
   copyMem(addr result.data[0], unsafeAddr data[0], 48)
 
-proc hashTreeRoot*(t: KZGCommitment): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
-
 proc hashTreeRootWith*(t: KZGCommitment, h: var Hasher) =
   let idx = h.index()
 
@@ -1029,6 +1023,12 @@ proc hashTreeRootWith*(t: KZGCommitment, h: var Hasher) =
   h.putBytes(t.data)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: KZGCommitment): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type IndexedAttestation* = object
   attestingIndices*: seq[uint64]
@@ -1079,18 +1079,12 @@ proc fromSSZBytes*(T: typedesc[IndexedAttestation], data: openArray[byte]): Inde
   result.signature = fromSSZBytes(Bytes96, data.toOpenArray(132, 228 - 1))
 
   block:
-    let dynData = data.toOpenArray(off0, len(data) - 1)
+    let dynData = @(data.toOpenArray(off0, len(data) - 1))
     let count = len(dynData) div 8
     result.attestingIndices = newSeq[uint64](count)
     for i in 0 ..< count:
       let off = i * 8
       littleEndian64(addr result.attestingIndices[i], unsafeAddr dynData[off])
-
-proc hashTreeRoot*(t: IndexedAttestation): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
 
 proc hashTreeRootWith*(t: IndexedAttestation, h: var Hasher) =
   let idx = h.index()
@@ -1110,6 +1104,12 @@ proc hashTreeRootWith*(t: IndexedAttestation, h: var Hasher) =
   hashTreeRootWith(t.signature, h)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: IndexedAttestation): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type AttesterSlashing* = object
   attestation1*: IndexedAttestation
@@ -1164,17 +1164,9 @@ proc fromSSZBytes*(T: typedesc[AttesterSlashing], data: openArray[byte]): Attest
     raise newException(SszError, "invalid offset")
 
   block:
-    let dynData = data.toOpenArray(off0, off1 - 1)
-    result.attestation1 = fromSSZBytes(IndexedAttestation, dynData)
+    result.attestation1 = fromSSZBytes(IndexedAttestation, data.toOpenArray(off0, off1 - 1))
   block:
-    let dynData = data.toOpenArray(off1, len(data) - 1)
-    result.attestation2 = fromSSZBytes(IndexedAttestation, dynData)
-
-proc hashTreeRoot*(t: AttesterSlashing): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
+    result.attestation2 = fromSSZBytes(IndexedAttestation, data.toOpenArray(off1, len(data) - 1))
 
 proc hashTreeRootWith*(t: AttesterSlashing, h: var Hasher) =
   let idx = h.index()
@@ -1186,6 +1178,12 @@ proc hashTreeRootWith*(t: AttesterSlashing, h: var Hasher) =
   hashTreeRootWith(t.attestation2, h)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: AttesterSlashing): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type Attestation* = object
   aggregationBits*: seq[byte]
@@ -1231,14 +1229,8 @@ proc fromSSZBytes*(T: typedesc[Attestation], data: openArray[byte]): Attestation
   result.signature = fromSSZBytes(Bytes96, data.toOpenArray(132, 228 - 1))
 
   block:
-    let dynData = data.toOpenArray(off0, len(data) - 1)
+    let dynData = @(data.toOpenArray(off0, len(data) - 1))
     result.aggregationBits = @(dynData)
-
-proc hashTreeRoot*(t: Attestation): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
 
 proc hashTreeRootWith*(t: Attestation, h: var Hasher) =
   let idx = h.index()
@@ -1253,6 +1245,12 @@ proc hashTreeRootWith*(t: Attestation, h: var Hasher) =
   hashTreeRootWith(t.signature, h)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: Attestation): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type ExecutionPayload* = object
   parentHash*: Bytes32
@@ -1417,10 +1415,10 @@ proc fromSSZBytes*(T: typedesc[ExecutionPayload], data: openArray[byte]): Execut
   littleEndian64(addr result.excessBlobGas, unsafeAddr data[520])
 
   block:
-    let dynData = data.toOpenArray(off0, off1 - 1)
+    let dynData = @(data.toOpenArray(off0, off1 - 1))
     result.extraData = @(dynData)
   block:
-    let dynData = data.toOpenArray(off1, off2 - 1)
+    let dynData = @(data.toOpenArray(off1, off2 - 1))
     if len(dynData) > 0:
       var firstOff: uint32
       littleEndian32(addr firstOff, unsafeAddr dynData[0])
@@ -1442,18 +1440,12 @@ proc fromSSZBytes*(T: typedesc[ExecutionPayload], data: openArray[byte]): Execut
           raise newException(SszError, "invalid offset")
         result.transactions[i] = @(dynData.toOpenArray(int(startOff), endOff - 1))
   block:
-    let dynData = data.toOpenArray(off2, len(data) - 1)
+    let dynData = @(data.toOpenArray(off2, len(data) - 1))
     let count = len(dynData) div 44
     result.withdrawals = newSeq[Withdrawal](count)
     for i in 0 ..< count:
       let off = i * 44
       result.withdrawals[i] = fromSSZBytes(Withdrawal, dynData.toOpenArray(off, off + 44 - 1))
-
-proc hashTreeRoot*(t: ExecutionPayload): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
 
 proc hashTreeRootWith*(t: ExecutionPayload, h: var Hasher) =
   let idx = h.index()
@@ -1523,6 +1515,12 @@ proc hashTreeRootWith*(t: ExecutionPayload, h: var Hasher) =
   h.putUint64(t.excessBlobGas)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: ExecutionPayload): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type BeaconBlockBody* = object
   randaoReveal*: Bytes96
@@ -1724,14 +1722,14 @@ proc fromSSZBytes*(T: typedesc[BeaconBlockBody], data: openArray[byte]): BeaconB
     raise newException(SszError, "invalid offset")
 
   block:
-    let dynData = data.toOpenArray(off0, off1 - 1)
+    let dynData = @(data.toOpenArray(off0, off1 - 1))
     let count = len(dynData) div 416
     result.proposerSlashings = newSeq[ProposerSlashing](count)
     for i in 0 ..< count:
       let off = i * 416
       result.proposerSlashings[i] = fromSSZBytes(ProposerSlashing, dynData.toOpenArray(off, off + 416 - 1))
   block:
-    let dynData = data.toOpenArray(off1, off2 - 1)
+    let dynData = @(data.toOpenArray(off1, off2 - 1))
     if len(dynData) > 0:
       var firstOff: uint32
       littleEndian32(addr firstOff, unsafeAddr dynData[0])
@@ -1753,7 +1751,7 @@ proc fromSSZBytes*(T: typedesc[BeaconBlockBody], data: openArray[byte]): BeaconB
           raise newException(SszError, "invalid offset")
         result.attesterSlashings[i] = fromSSZBytes(AttesterSlashing, dynData.toOpenArray(int(startOff), endOff - 1))
   block:
-    let dynData = data.toOpenArray(off2, off3 - 1)
+    let dynData = @(data.toOpenArray(off2, off3 - 1))
     if len(dynData) > 0:
       var firstOff: uint32
       littleEndian32(addr firstOff, unsafeAddr dynData[0])
@@ -1775,42 +1773,35 @@ proc fromSSZBytes*(T: typedesc[BeaconBlockBody], data: openArray[byte]): BeaconB
           raise newException(SszError, "invalid offset")
         result.attestations[i] = fromSSZBytes(Attestation, dynData.toOpenArray(int(startOff), endOff - 1))
   block:
-    let dynData = data.toOpenArray(off3, off4 - 1)
+    let dynData = @(data.toOpenArray(off3, off4 - 1))
     let count = len(dynData) div 1240
     result.deposits = newSeq[Deposit](count)
     for i in 0 ..< count:
       let off = i * 1240
       result.deposits[i] = fromSSZBytes(Deposit, dynData.toOpenArray(off, off + 1240 - 1))
   block:
-    let dynData = data.toOpenArray(off4, off5 - 1)
+    let dynData = @(data.toOpenArray(off4, off5 - 1))
     let count = len(dynData) div 112
     result.voluntaryExits = newSeq[SignedVoluntaryExit](count)
     for i in 0 ..< count:
       let off = i * 112
       result.voluntaryExits[i] = fromSSZBytes(SignedVoluntaryExit, dynData.toOpenArray(off, off + 112 - 1))
   block:
-    let dynData = data.toOpenArray(off5, off6 - 1)
-    result.executionPayload = fromSSZBytes(ExecutionPayload, dynData)
+    result.executionPayload = fromSSZBytes(ExecutionPayload, data.toOpenArray(off5, off6 - 1))
   block:
-    let dynData = data.toOpenArray(off6, off7 - 1)
+    let dynData = @(data.toOpenArray(off6, off7 - 1))
     let count = len(dynData) div 172
     result.blsToExecutionChanges = newSeq[SignedBLSToExecutionChange](count)
     for i in 0 ..< count:
       let off = i * 172
       result.blsToExecutionChanges[i] = fromSSZBytes(SignedBLSToExecutionChange, dynData.toOpenArray(off, off + 172 - 1))
   block:
-    let dynData = data.toOpenArray(off7, len(data) - 1)
+    let dynData = @(data.toOpenArray(off7, len(data) - 1))
     let count = len(dynData) div 48
     result.blobKzgCommitments = newSeq[KZGCommitment](count)
     for i in 0 ..< count:
       let off = i * 48
       result.blobKzgCommitments[i] = fromSSZBytes(KZGCommitment, dynData.toOpenArray(off, off + 48 - 1))
-
-proc hashTreeRoot*(t: BeaconBlockBody): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
 
 proc hashTreeRootWith*(t: BeaconBlockBody, h: var Hasher) =
   let idx = h.index()
@@ -1881,6 +1872,12 @@ proc hashTreeRootWith*(t: BeaconBlockBody, h: var Hasher) =
 
   h.merkleize(idx)
 
+proc hashTreeRoot*(t: BeaconBlockBody): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
+
 type BeaconBlock* = object
   slot*: uint64
   proposerIndex*: uint64
@@ -1941,14 +1938,7 @@ proc fromSSZBytes*(T: typedesc[BeaconBlock], data: openArray[byte]): BeaconBlock
     raise newException(SszError, "invalid offset")
 
   block:
-    let dynData = data.toOpenArray(off0, len(data) - 1)
-    result.body = fromSSZBytes(BeaconBlockBody, dynData)
-
-proc hashTreeRoot*(t: BeaconBlock): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
+    result.body = fromSSZBytes(BeaconBlockBody, data.toOpenArray(off0, len(data) - 1))
 
 proc hashTreeRootWith*(t: BeaconBlock, h: var Hasher) =
   let idx = h.index()
@@ -1969,6 +1959,12 @@ proc hashTreeRootWith*(t: BeaconBlock, h: var Hasher) =
   hashTreeRootWith(t.body, h)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: BeaconBlock): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
 
 type SignedBeaconBlock* = object
   message*: BeaconBlock
@@ -2010,14 +2006,7 @@ proc fromSSZBytes*(T: typedesc[SignedBeaconBlock], data: openArray[byte]): Signe
   result.signature = fromSSZBytes(Bytes96, data.toOpenArray(4, 100 - 1))
 
   block:
-    let dynData = data.toOpenArray(off0, len(data) - 1)
-    result.message = fromSSZBytes(BeaconBlock, dynData)
-
-proc hashTreeRoot*(t: SignedBeaconBlock): array[32, byte] =
-  var h = HasherPool.get()
-  defer: HasherPool.put(h)
-  hashTreeRootWith(t, h)
-  result = h.hashRoot()
+    result.message = fromSSZBytes(BeaconBlock, data.toOpenArray(off0, len(data) - 1))
 
 proc hashTreeRootWith*(t: SignedBeaconBlock, h: var Hasher) =
   let idx = h.index()
@@ -2029,3 +2018,9 @@ proc hashTreeRootWith*(t: SignedBeaconBlock, h: var Hasher) =
   hashTreeRootWith(t.signature, h)
 
   h.merkleize(idx)
+
+proc hashTreeRoot*(t: SignedBeaconBlock): array[32, byte] =
+  var h = HasherPool.get()
+  defer: HasherPool.put(h)
+  hashTreeRootWith(t, h)
+  result = h.hashRoot()
