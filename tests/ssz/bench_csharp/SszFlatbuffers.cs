@@ -211,6 +211,17 @@ namespace SszFlatbuffers
             }
         }
 
+        // ---- Aliases for codegen compatibility ----
+
+        public void PutUint64(ulong v) => PutUInt64(v);
+        public void PutUint32(uint v) => PutUInt32(v);
+        public void PutUint16(ushort v) => PutUInt16(v);
+        public void PutUint8(byte v) => PutUInt8(v);
+        public void AppendUint64(ulong v) => AppendUInt64(v);
+        public void AppendUint32(uint v) => AppendUInt32(v);
+        public void AppendUint16(ushort v) => AppendUInt16(v);
+        public void AppendUint8(byte v) => AppendUInt8(v);
+
         // ---- Merkleization ----
 
         public void Merkleize(int idx)

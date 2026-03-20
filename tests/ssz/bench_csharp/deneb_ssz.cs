@@ -49,15 +49,20 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'data'
             hh.PutBytes(Data);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -104,15 +109,20 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'data'
             hh.PutBytes(Data);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -159,15 +169,20 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'data'
             hh.PutBytes(Data);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -214,15 +229,20 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'data'
             hh.PutBytes(Data);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -269,15 +289,20 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'data'
             hh.PutBytes(Data);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -324,15 +349,20 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'data'
             hh.PutBytes(Data);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -390,9 +420,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'previous_version'
@@ -405,6 +434,12 @@ namespace flatbuffers_codegen
             hh.PutUint64(Epoch);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -456,9 +491,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'epoch'
@@ -468,6 +502,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(Root);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -536,9 +576,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'slot'
@@ -557,6 +596,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(BodyRoot);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -609,9 +654,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'message'
@@ -621,6 +665,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(Signature);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -678,9 +728,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'deposit_root'
@@ -693,6 +742,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(BlockHash);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -777,9 +832,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'pubkey'
@@ -807,6 +861,12 @@ namespace flatbuffers_codegen
             hh.PutUint64(WithdrawableEpoch);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -875,9 +935,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'slot'
@@ -896,6 +955,12 @@ namespace flatbuffers_codegen
             Target.HashTreeRootWith(hh);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -948,9 +1013,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'signed_header_1'
@@ -960,6 +1024,12 @@ namespace flatbuffers_codegen
             SignedHeader2.HashTreeRootWith(hh);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1023,9 +1093,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'pubkey'
@@ -1041,6 +1110,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(Signature);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1093,9 +1168,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'proof'
@@ -1105,6 +1179,12 @@ namespace flatbuffers_codegen
             Data.HashTreeRootWith(hh);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1152,9 +1232,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'epoch'
@@ -1164,6 +1243,12 @@ namespace flatbuffers_codegen
             hh.PutUint64(ValidatorIndex);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1216,9 +1301,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'message'
@@ -1228,6 +1312,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(Signature);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1280,9 +1370,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'sync_committee_bits'
@@ -1292,6 +1381,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(SyncCommitteeSignature);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1353,9 +1448,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'index'
@@ -1371,6 +1465,12 @@ namespace flatbuffers_codegen
             hh.PutUint64(Amount);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1428,9 +1528,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'validator_index'
@@ -1443,6 +1542,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(ToExecutionAddress);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1495,9 +1600,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'message'
@@ -1507,6 +1611,12 @@ namespace flatbuffers_codegen
             hh.PutBytes(Signature);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1553,15 +1663,20 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'data'
             hh.PutBytes(Data);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1649,9 +1764,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'attesting_indices'
@@ -1670,6 +1784,12 @@ namespace flatbuffers_codegen
             Signature.HashTreeRootWith(hh);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1751,9 +1871,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'attestation_1'
@@ -1763,6 +1882,12 @@ namespace flatbuffers_codegen
             Attestation2.HashTreeRootWith(hh);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -1839,9 +1964,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'aggregation_bits'
@@ -1854,6 +1978,12 @@ namespace flatbuffers_codegen
             Signature.HashTreeRootWith(hh);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -2083,9 +2213,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'parent_hash'
@@ -2158,6 +2287,12 @@ namespace flatbuffers_codegen
             hh.PutUint64(ExcessBlobGas);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -2483,9 +2618,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'randao_reveal'
@@ -2560,6 +2694,12 @@ namespace flatbuffers_codegen
             }
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -2649,9 +2789,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'slot'
@@ -2670,6 +2809,12 @@ namespace flatbuffers_codegen
             Body.HashTreeRootWith(hh);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }
@@ -2740,9 +2885,8 @@ namespace flatbuffers_codegen
             return t;
         }
 
-        public byte[] HashTreeRoot()
+        public void HashTreeRootWith(Hasher hh)
         {
-            var hh = Hasher.New();
             int idx = hh.Index();
 
             // Field 'message'
@@ -2752,6 +2896,12 @@ namespace flatbuffers_codegen
             Signature.HashTreeRootWith(hh);
 
             hh.Merkleize(idx);
+        }
+
+        public byte[] HashTreeRoot()
+        {
+            var hh = Hasher.New();
+            HashTreeRootWith(hh);
             return hh.HashRoot();
         }
     }

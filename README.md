@@ -108,13 +108,13 @@ Each field keeps a stable generalized index across all forks. Serialization is u
 
 Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots.
 
-| Operation | Go | Rust | Rust (view) | TypeScript |
+| Operation | Rust | Go | Java | TypeScript |
 |---|---|---|---|---|
-| **Unmarshal** | 32 us | **12 us** | **1.2 ns** | 497 us |
-| **Marshal** | 16 us | **3.6 us** | — | 82 us |
-| **HashTreeRoot** | **399 us** | 455 us | — | 23,913 us |
+| **Unmarshal** | **12 us** | 32 us | 80 us | 497 us |
+| **Marshal** | **3.6 us** | 16 us | 18 us | 82 us |
+| **HashTreeRoot** | **399 us** | 455 us | 804 us | 23,913 us |
 
-Go and Rust use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). TypeScript uses a pure-JS SHA-256 implementation — the 60x HTR gap is entirely the hash function, not the codegen.
+Rust zero-copy view: unmarshal in **1.2 ns** (validated wrap, no copy). Go and Rust HTR use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). Java uses `java.security.MessageDigest`. TypeScript uses pure-JS SHA-256.
 
 | Progressive | Go | Rust |
 |---|---|---|
