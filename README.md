@@ -18,7 +18,7 @@ Cross-language SSZ code generation from [FlatBuffers](https://github.com/google/
 
 ```bash
 cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release && make -j
-./flatc --ssz-go --ssz-rust --ssz-ts -o output/ schema.fbs
+./flatc --ssz-go --ssz-rust --ssz-ts --ssz-zig --ssz-java --ssz-csharp --ssz-nim -o output/ schema.fbs
 ```
 
 ```fbs
@@ -34,21 +34,57 @@ table Attestation {
 }
 ```
 
-**Go:**
+### Go
 ```go
 data, _ := block.MarshalSSZ()
 block.UnmarshalSSZ(data)
 root, _ := block.HashTreeRoot()
 ```
 
-**Rust:**
+### Rust
 ```rust
 let block = SignedBeaconBlock::from_ssz_bytes(&data)?;
+let data = block.as_ssz_bytes();
 let root = block.tree_hash_root();
 
-// Zero-copy view — 1.2ns validated wrap, reads directly from buffer
+// Zero-copy view — 1.2ns validated wrap
 let view = SignedBeaconBlockView::from_ssz_bytes(&data)?;
 let slot = view.message().slot();
+```
+
+### TypeScript
+```typescript
+const block = SignedBeaconBlock.fromSszBytes(data);
+const encoded = block.toSszBytes();
+const root = block.treeHashRoot();
+```
+
+### Zig
+```zig
+const block = try SignedBeaconBlock.fromSszBytes(data);
+const encoded = try block.toSszBytes(allocator);
+const root = block.treeHashRoot();
+```
+
+### Java
+```java
+SignedBeaconBlock block = SignedBeaconBlock.fromSSZBytes(data);
+byte[] encoded = block.marshalSSZ();
+byte[] root = block.hashTreeRoot();
+```
+
+### C#
+```csharp
+var block = SignedBeaconBlock.FromSSZBytes(data);
+byte[] encoded = block.MarshalSSZ();
+byte[] root = block.HashTreeRoot();
+```
+
+### Nim
+```nim
+let block = SignedBeaconBlock.fromSSZBytes(data)
+let encoded = block.marshalSSZ()
+let root = block.hashTreeRoot()
 ```
 
 ## Schema Evolution (EIP-7495 / EIP-7916)
@@ -70,7 +106,7 @@ Each field keeps a stable generalized index across all forks. Serialization is u
 
 ## Benchmarks
 
-Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots. Go and Rust use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree).
+Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots. Go and Rust use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). TypeScript, Zig, Java, C#, and Nim benchmarks pending runtime library implementation.
 
 | Operation | Go | Rust | Rust (view) |
 |---|---|---|---|
