@@ -106,7 +106,7 @@ Each field keeps a stable generalized index across all forks. Serialization is u
 
 ## Benchmarks
 
-Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots. Go and Rust use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). TypeScript, Zig, Java, C#, and Nim benchmarks pending runtime library implementation.
+Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots. Go and Rust use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree).
 
 | Operation | Go | Rust | Rust (view) |
 |---|---|---|---|
