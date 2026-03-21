@@ -3,9 +3,11 @@
 ## Provides `Hasher` for merkleization, `HasherPool` (via `getHasher`/`putHasher`)
 ## for reuse, and `SszError` for decode errors.
 ##
-## Pure Nim — no external dependencies. SHA-256 is implemented inline.
+## Uses hashtree_abi for SIMD-accelerated batch SHA-256 in merkleization.
+## Falls back to pure-Nim SHA-256 for single hashes (mixin operations).
 
 import std/locks
+import hashtree_abi
 
 # ---- SHA-256 (pure Nim, FIPS 180-4) ----
 
@@ -297,13 +299,18 @@ proc fillUpTo32*(h: var Hasher) =
 
 # ---- Batch hashing helper ----
 
+var hashtreeInitialized = false
+
+proc initHashtree*() =
+  if not hashtreeInitialized:
+    hashtree_init(nil)
+    hashtreeInitialized = true
+
 proc hashPairs(output: var seq[byte], input: openArray[byte], pairs: int) =
-  ## Hash `pairs` consecutive 64-byte pair blocks from `input` into `output`.
-  ## Each pair of 32-byte chunks produces one 32-byte hash.
+  ## Hash `pairs` consecutive 64-byte pair blocks using SIMD-accelerated hashtree.
   output.setLen(pairs * 32)
-  for i in 0 ..< pairs:
-    let h = sha256(input[i * 64 ..< i * 64 + 64])
-    copyMem(addr output[i * 32], unsafeAddr h[0], 32)
+  if pairs > 0:
+    hashtree_hash(addr output[0], unsafeAddr input[0], pairs.uint64)
 
 # ---- Merkleization ----
 

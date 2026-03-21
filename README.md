@@ -110,11 +110,11 @@ Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against
 
 | Operation | Rust | Zig | Nim | Go | C# | Java | TypeScript |
 |---|---|---|---|---|---|---|---|
-| **Unmarshal** | **12 us** | **48 ns**\* | 18 us | 32 us | 61 us | 80 us | 497 us |
-| **Marshal** | **3.6 us** | 198 us | 98 us | 16 us | 83 us | 18 us | 82 us |
-| **HashTreeRoot** | **399 us** | 1,662 us | 4,150 us | 455 us | 1,904 us | 804 us | 23,913 us |
+| **Unmarshal** | **12 us** | **48 ns**\* | 16 us | 32 us | 61 us | 80 us | 497 us |
+| **Marshal** | **3.6 us** | 198 us | 99 us | 16 us | 83 us | 18 us | 82 us |
+| **HashTreeRoot** | **399 us** | 1,662 us | 766 us | 455 us | 1,904 us | 804 us | 23,913 us |
 
-\* Zig unmarshal is zero-copy (slices reference input buffer). Rust zero-copy view: **1.2 ns**. Go, Rust, and C# HTR use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). All results verified against known hash tree roots.
+\* Zig unmarshal is zero-copy (slices reference input buffer). Rust zero-copy view: **1.2 ns**. Go, Rust, C#, and Nim HTR use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). All results verified against known hash tree roots.
 
 | Progressive | Go | Rust |
 |---|---|---|
