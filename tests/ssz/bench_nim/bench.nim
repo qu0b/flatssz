@@ -8,6 +8,7 @@ proc hexToBytes(s: string): seq[byte] =
     result[i] = byte(parseHexInt(s[i*2 .. i*2+1]))
 
 proc main() =
+  initHashtree()
   let data = readFile("block-mainnet.ssz")
   let buf = cast[seq[byte]](data)
   let meta = parseJson(readFile("block-mainnet-meta.json"))
