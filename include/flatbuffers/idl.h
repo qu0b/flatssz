@@ -774,6 +774,7 @@ struct IDLOptions {
     kSszJava = 1 << 24,
     kSszCSharp = 1 << 25,
     kSszNim = 1 << 26,
+    kSszLean = 1 << 27,
     kMAX
   };
 

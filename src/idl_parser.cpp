@@ -2830,7 +2830,8 @@ bool Parser::SupportsAdvancedArrayFeatures() const {
             IDLOptions::kSwift | IDLOptions::kSszGo |
             IDLOptions::kSszRust | IDLOptions::kSszTs |
             IDLOptions::kSszZig | IDLOptions::kSszJava |
-            IDLOptions::kSszCSharp | IDLOptions::kSszNim)) == 0;
+            IDLOptions::kSszCSharp | IDLOptions::kSszNim |
+            IDLOptions::kSszLean)) == 0;
 }
 
 bool Parser::Supports64BitOffsets() const {

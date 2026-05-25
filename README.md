@@ -1,6 +1,6 @@
 # flatssz
 
-Cross-language SSZ code generation from [FlatBuffers](https://github.com/google/flatbuffers) schemas. Define Ethereum consensus layer types once in `.fbs` and generate code for 7 languages. Supports EIP-7495 ProgressiveContainer and EIP-7916 ProgressiveList for forward-compatible schema evolution across forks.
+Cross-language SSZ code generation from [FlatBuffers](https://github.com/google/flatbuffers) schemas. Define Ethereum consensus layer types once in `.fbs` and generate code for 8 languages. Supports EIP-7495 ProgressiveContainer and EIP-7916 ProgressiveList for forward-compatible schema evolution across forks.
 
 ## Supported Languages
 
@@ -13,12 +13,13 @@ Cross-language SSZ code generation from [FlatBuffers](https://github.com/google/
 | `--ssz-java` | Java | Besu/Teku | marshal, unmarshal, HTR, progressive |
 | `--ssz-csharp` | C# | Nethermind | marshal, unmarshal, HTR, progressive |
 | `--ssz-nim` | Nim | Nimbus | marshal, unmarshal, HTR, progressive |
+| `--ssz-lean` | Lean | [SizzLean](https://github.com/etheorem/etheorem/tree/main/packages/SizzLean) | marshal, unmarshal, HTR (machine-checked) |
 
 ## Quick Start
 
 ```bash
 cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release && make -j
-./flatc --ssz-go --ssz-rust --ssz-ts --ssz-zig --ssz-java --ssz-csharp --ssz-nim -o output/ schema.fbs
+./flatc --ssz-go --ssz-rust --ssz-ts --ssz-zig --ssz-java --ssz-csharp --ssz-nim --ssz-lean -o output/ schema.fbs
 ```
 
 ```fbs
@@ -87,6 +88,15 @@ let encoded = block.marshalSSZ()
 let root = block.hashTreeRoot()
 ```
 
+### Lean
+Generated types are plain `structure … deriving SSZRepr`; SizzLean supplies
+serialize / deserialize / hash-tree-root (and the correctness proofs).
+```lean
+let .ok block := SSZ.deserialize (T := SignedBeaconBlock) data | return
+let encoded := SSZ.serialize block
+let root    := SSZ.hashTreeRoot Sha256 block.message
+```
+
 ## Schema Evolution (EIP-7495 / EIP-7916)
 
 Add fields in future forks without breaking existing merkle proofs:
@@ -108,13 +118,15 @@ Each field keeps a stable generalized index across all forks. Serialization is u
 
 Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against known hash tree roots.
 
-| Operation | Rust | Zig | Nim | Go | C# | Java | TypeScript |
-|---|---|---|---|---|---|---|---|
-| **Unmarshal** | **12 us** | **48 ns**\* | 16 us | 32 us | 61 us | 80 us | 497 us |
-| **Marshal** | **3.6 us** | 198 us | 99 us | 16 us | 83 us | 18 us | 82 us |
-| **HashTreeRoot** | **399 us** | 1,662 us | 766 us | 455 us | 1,904 us | 804 us | 23,913 us |
+| Operation | Rust | Zig | Nim | Go | C# | Java | TypeScript | Lean† |
+|---|---|---|---|---|---|---|---|---|
+| **Unmarshal** | **12 us** | **48 ns**\* | 16 us | 32 us | 61 us | 80 us | 497 us | 6,200 us |
+| **Marshal** | **3.6 us** | 198 us | 99 us | 16 us | 83 us | 18 us | 82 us | 7,400 us |
+| **HashTreeRoot** | **399 us** | 1,662 us | 766 us | 455 us | 1,904 us | 804 us | 23,913 us | 12,000 us |
 
 \* Zig unmarshal is zero-copy (slices reference input buffer). Rust zero-copy view: **1.2 ns**. Go, Rust, C#, and Nim HTR use batch SIMD SHA-256 via [hashtree](https://github.com/OffchainLabs/hashtree). All results verified against known hash tree roots.
+
+† Lean uses [SizzLean](https://github.com/etheorem/etheorem/tree/main/packages/SizzLean)'s `deriving SSZRepr`: spec-level (uncached) serialize / deserialize and **scalar** OpenSSL SHA-256, prioritizing machine-checked correctness (roundtrip, non-malleability and size-bound proofs) over raw throughput. Runtime vendored under `lean/ssz/` (LGPL). Benchmark via `tests/ssz/bench_lean/run.sh`.
 
 | Progressive | Go | Rust |
 |---|---|---|
@@ -137,7 +149,10 @@ Deneb `SignedBeaconBlock` (~130KB), real Ethereum mainnet data, verified against
 - Fixed-length arrays in tables must be wrapped in a struct
 - `uint16` array length limit (65535) prevents some BeaconState fields
 - ProgressiveContainer field IDs must be <= 255 (EIP-7495 limit)
+- The Lean backend (`--ssz-lean`) does not support unions or progressive types (`ssz_progressive` / `ssz_progressive_list`): SizzLean intentionally omits them, since no consensus fork uses them. Plain `Container` / `List` / `Bitlist` (e.g. all of Deneb) are fully supported.
 
 ## License
 
 Apache License, Version 2.0. Fork of [google/flatbuffers](https://github.com/google/flatbuffers).
+
+The Lean SSZ runtime vendored under `lean/ssz/` (SizzLean, LeanSha256) is from [etheorem/etheorem](https://github.com/etheorem/etheorem) and remains under its own **LGPL** license (`lean/ssz/LICENSE`); see `lean/ssz/README.md`.

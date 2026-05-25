@@ -2,6 +2,7 @@
 *_wire.bin
 .DS_Store
 **/.build
+**/.lake/
 build
 **/Packages
 /*.xcodeproj
