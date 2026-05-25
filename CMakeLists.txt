@@ -172,6 +172,7 @@ set(FlatBuffers_Compiler_SRCS
   src/idl_gen_ssz_java.cpp
   src/idl_gen_ssz_csharp.cpp
   src/idl_gen_ssz_nim.cpp
+  src/idl_gen_ssz_lean.cpp
   src/idl_gen_java.cpp
   src/idl_gen_ts.cpp
   src/idl_gen_php.cpp

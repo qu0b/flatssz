@@ -36,6 +36,7 @@
 #include "idl_gen_ssz_java.h"
 #include "idl_gen_ssz_csharp.h"
 #include "idl_gen_ssz_nim.h"
+#include "idl_gen_ssz_lean.h"
 #include "idl_gen_java.h"
 #include "idl_gen_json_schema.h"
 #include "idl_gen_kotlin.h"
@@ -163,6 +164,12 @@ int main(int argc, const char* argv[]) {
           "", "ssz-nim", "",
           "Generate Nim SSZ encode/decode/hash files"},
       flatbuffers::NewSszNimCodeGenerator());
+
+  flatc.RegisterCodeGenerator(
+      flatbuffers::FlatCOption{
+          "", "ssz-lean", "",
+          "Generate Lean (SizzLean) SSZ type definitions"},
+      flatbuffers::NewSszLeanCodeGenerator());
 
   flatc.RegisterCodeGenerator(
       flatbuffers::FlatCOption{"j", "java", "",
